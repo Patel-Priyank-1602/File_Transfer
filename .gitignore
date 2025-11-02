@@ -1,0 +1,49 @@
+# --- Environment ---
+# Ignore the .env file containing credentials
+.env
+
+# --- Uploaded Files ---
+# Ignore the shared_files folder containing uploaded files
+shared_files/
+
+# --- Python ---
+# Byte-compiled/optimized/c-extension files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environment
+# (If you name your environment 'venv' or 'env')
+venv/
+env/
+
+# --- Flask ---
+# Flask-Caching
+.webassets-cache/
+.flask-cache/
+
+# --- Other ---
+# OS-specific files
+.DS_Store
+Thumbs.db
