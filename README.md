@@ -40,22 +40,22 @@ Replace these placeholder images with real screenshots from your project.
 Recommended folder: `/screenshots/`
 
 ### Login Page
-![Login Page](Screenshot/Login.png)
+<img src="Screenshot/Login.png" height="250"/>
 
 ### Server
-![PC Upload](Screenshot/Server.png)
+<img src="Screenshot/Server.png" height="250"/>
 
 ### PC Upload
-![PC Upload](Screenshot/PC_Dashboard.png)
+<img src="Screenshot/PC_Dashboard.png" height="250"/>
 
 ### Mobile Upload
-![Mobile Upload](Screenshot/Mobile_Dashboard.jpg)
+<img src="Screenshot/Mobile_Dashboard.jpg" height="250"/>
 
 ### PC Download
-![PC Download](Screenshot/PC_Download.png)
+<img src="Screenshot/PC_Download.png" height="250"/>
 
 ### Mobile Download
-![Mobile Download](Screenshot/Mobile_Download.png)
+<img src="Screenshot/Mobile_Download.jpg" height="250"/>
 
 ---
 
