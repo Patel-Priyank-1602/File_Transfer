@@ -34,6 +34,31 @@ Share files between your **PC and mobile devices** — No internet is required w
 
 ---
 
+## 🖼️ Screenshots
+
+Replace these placeholder images with real screenshots from your project.  
+Recommended folder: `/screenshots/`
+
+### Login Page
+![Login Page](Screenshot/Login.png)
+
+### Server
+![PC Upload](Screenshot/Server.png)
+
+### PC Upload
+![PC Upload](Screenshot/PC Dashboard.png)
+
+### Mobile Upload
+![Mobile Upload](Screenshot/Mobile Dashboard.jpg)
+
+### PC Download
+![PC Download](Screenshot/PC Download.png)
+
+### Mobile Download
+![Mobile Download](Screenshot/Mobile Download.png)
+
+---
+
 ## 🚀 Installation
 
 - ### Clone the Repository
