@@ -5,6 +5,7 @@ import qrcode
 import io
 import base64
 from dotenv import load_dotenv
+from waitress import serve
 
 # ====================================================================
 # LOAD ENVIRONMENT VARIABLES
@@ -25,6 +26,8 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 # ===== App Settings =====
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.secret_key = os.getenv("SECRET_KEY")
 
 # ===== Upload Folder =====
@@ -830,22 +833,30 @@ def files():
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    # *** LOGIN CHECK REMOVED ***
-    # Anyone can upload a file (from mobile or PC dashboard).
-    f = request.files["file"]
-    f.save(os.path.join(UPLOAD_FOLDER, f.filename))
-    
-    # Check where the request came from
+    file = request.files["file"]
+    save_path = os.path.join(UPLOAD_FOLDER, file.filename)
+
+    with open(save_path, "wb") as f:
+        while True:
+            chunk = file.stream.read(8192 * 8)  # 64KB chunks
+            if not chunk:
+                break
+            f.write(chunk)
+
     if request.referrer and 'dashboard' in request.referrer:
         return redirect(url_for("dashboard"))
-    else:
-        return redirect(url_for("files"))
+    return redirect(url_for("files"))
 
 @app.route("/files/<filename>")
 def serve_file(filename):
     # *** LOGIN CHECK REMOVED ***
     # Anyone can download a file.
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    return send_from_directory(
+    UPLOAD_FOLDER,
+    filename,
+    as_attachment=True,
+    conditional=True
+)
 
 @app.route("/logout")
 def logout():
@@ -877,4 +888,4 @@ if __name__ == "__main__":
         print(f"   http://127.0.0.1:{PORT}")
         print(f"After logging in, you will get the PC Dashboard.")
         
-        app.run(host="0.0.0.0", port=PORT)
+        serve(app, host="0.0.0.0", port=PORT, threads=8)
