@@ -1,11 +1,16 @@
 import socket
-from flask import Flask, request, send_from_directory, render_template_string, redirect, url_for, session
+from flask import Flask, request, send_from_directory, render_template_string, redirect, url_for, session, Response, jsonify
 import os
 import qrcode
 import io
 import base64
 from dotenv import load_dotenv
-from waitress import serve
+from werkzeug.utils import secure_filename
+import mimetypes
+import hashlib
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 # ====================================================================
 # LOAD ENVIRONMENT VARIABLES
@@ -20,23 +25,40 @@ HOTSPOT_PASSWORD = os.getenv("HOTSPOT_PASSWORD")
 HOTSPOT_IP = os.getenv("HOTSPOT_IP")
 PORT = int(os.getenv("PORT", 8000))
 
-# ===== Credentials (CHANGED: Using ADMIN_USERNAME and ADMIN_PASSWORD) =====
+# ===== Credentials =====
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 # ===== App Settings =====
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.secret_key = os.getenv("SECRET_KEY")
+
+# ===== Performance Configuration =====
+CHUNK_SIZE = 2 * 1024 * 1024  # 2MB chunks for parallel transfer
+MAX_CONTENT_LENGTH = 2000 * 1024 * 1024  # 2GB max file size
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+
+# ===== Parallel Transfer Configuration =====
+NUM_PARALLEL_STREAMS = 4  # Number of parallel TCP streams
+STREAM_CHUNK_SIZE = 512 * 1024  # 512KB per stream chunk
 
 # ===== Upload Folder =====
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "shared_files")
+TEMP_FOLDER = os.path.join(UPLOAD_FOLDER, ".temp")
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+if not os.path.exists(TEMP_FOLDER):
+    os.makedirs(TEMP_FOLDER)
+
+# ===== Thread pool for parallel transfers =====
+executor = ThreadPoolExecutor(max_workers=NUM_PARALLEL_STREAMS * 4)
+
+# ===== Active transfers tracking =====
+active_transfers = {}
+transfer_lock = threading.Lock()
 
 # ====================================================================
-# (Your HTML Templates remain exactly the same)
+# HTML TEMPLATES
 # ====================================================================
 
 LOGIN_HTML = """
@@ -50,22 +72,16 @@ LOGIN_HTML = """
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
 <style>
-    /* --- Reset & Base Styles --- */
-    * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: 'Poppins', Arial, sans-serif;
         display: grid;
         place-items: center;
         min-height: 100vh;
-        background-color: #121212; /* Dark background */
+        background-color: #121212;
         color: #333;
-        padding: 20px; /* Ensures card doesn't touch screen edges on mobile */
+        padding: 20px;
     }
-    /* --- Login Card --- */
     .login-card {
         width: 100%;
         max-width: 400px;
@@ -80,9 +96,7 @@ LOGIN_HTML = """
         font-weight: 600;
         margin-bottom: 25px;
         color: #000;
-        transition: font-size 0.3s ease;
     }
-    /* --- Form Styling --- */
     .form-group {
         position: relative;
         margin-bottom: 20px;
@@ -121,26 +135,16 @@ LOGIN_HTML = """
         transition: background-color 0.3s ease, transform 0.2s ease;
         margin-top: 10px;
     }
-    .login-button:hover {
-        background: #333;
-    }
-    .login-button:active {
-        transform: scale(0.98);
-    }
-    /* --- Error Message --- */
+    .login-button:hover { background: #333; }
+    .login-button:active { transform: scale(0.98); }
     .error-message {
         color: #d93025;
         margin-top: 20px;
         font-weight: 500;
     }
-    /* --- Mobile Responsive Adjustments --- */
     @media (max-width: 480px) {
-        .login-card {
-            padding: 30px 20px; /* Reduce padding on smaller screens */
-        }
-        .login-card h2 {
-            font-size: 2rem; /* Reduce heading size for mobile */
-        }
+        .login-card { padding: 30px 20px; }
+        .login-card h2 { font-size: 2rem; }
     }
 </style>
 </head>
@@ -158,7 +162,6 @@ LOGIN_HTML = """
         </div>
         <input type="submit" value="Login" class="login-button">
     </form>
-    
     {% if error %}
     <p class="error-message">{{ error }}</p>
     {% endif %}
@@ -167,60 +170,47 @@ LOGIN_HTML = """
 </html>
 """
 
-# ====================================================================
-# DASHBOARD HTML (with reduced height)
-# ====================================================================
 DASHBOARD_HTML = """
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PC Dashboard - File Server</title>
+<title>PC Dashboard - Parallel Transfer Server</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-    /* --- Reset & Base Styles --- */
-    * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: 'Poppins', Arial, sans-serif;
         min-height: 100vh;
-        background-color: #121212; /* Dark background */
+        background-color: #121212;
         color: #333;
         padding: 20px;
     }
-    h2, h3 {
-        font-weight: 600;
-        color: #000;
-    }
+    h2, h3 { font-weight: 600; color: #000; }
     
-    /* --- Layout --- */
     .dashboard-container {
         display: grid;
-        grid-template-columns: 1fr 1.5fr; /* Original Width */
+        grid-template-columns: 1fr 1.5fr;
         gap: 30px;
         width: 100%;
-        max-width: 1400px; /* Original Width */
+        max-width: 1400px;
         margin: 0 auto;
         background: #ffffff;
-        padding: 20px 30px; /* MODIFIED: Reduced top/bottom padding */
+        padding: 20px 30px;
         border-radius: 12px;
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
     }
     
-    /* --- Left Panel: QR Codes --- */
     .qr-panel {
-        padding: 10px; /* MODIFIED: Reduced padding */
+        padding: 10px;
         border-right: 1px solid #eee;
     }
     .qr-panel h2 {
         font-size: 2rem;
-        margin-bottom: 20px; /* MODIFIED: Reduced margin */
+        margin-bottom: 20px;
         text-align: center;
     }
     .step-box {
@@ -228,7 +218,7 @@ DASHBOARD_HTML = """
         border: 1px solid #eee;
         border-radius: 8px;
         text-align: center;
-        margin-bottom: 20px; /* MODIFIED: Reduced margin */
+        margin-bottom: 20px;
     }
     .step-box h3 {
         font-size: 1.4rem;
@@ -236,7 +226,7 @@ DASHBOARD_HTML = """
     }
     .step-box img {
         width: 100%;
-        max-width: 200px; /* MODIFIED: Was 250px, made QR code smaller */
+        max-width: 200px;
         height: auto;
         border: 1px solid #ddd;
         border-radius: 4px;
@@ -246,10 +236,27 @@ DASHBOARD_HTML = """
         font-size: 1rem;
         color: #555;
     }
+    .performance-info {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .performance-info h4 {
+        font-size: 1.1rem;
+        margin-bottom: 8px;
+        color: white;
+    }
+    .performance-info p {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
     .logout-section {
         text-align: center;
-        margin-top: 20px; /* MODIFIED: Reduced margin */
-        padding-top: 15px; /* MODIFIED: Reduced padding */
+        margin-top: 20px;
+        padding-top: 15px;
         border-top: 1px solid #eee;
     }
     .logout-link {
@@ -259,18 +266,12 @@ DASHBOARD_HTML = """
         transition: color 0.3s ease;
         font-size: 1.1rem;
     }
-    .logout-link:hover {
-        color: #d93025; /* Red for emphasis on hover */
-    }
+    .logout-link:hover { color: #d93025; }
 
-    /* --- Right Panel: Files --- */
-    .files-panel {
-        padding: 10px; /* MODIFIED: Reduced padding */
-    }
+    .files-panel { padding: 10px; }
     
-    /* Copy URL Section (from old QR_HTML) */
     .copy-url-section {
-        margin-bottom: 20px; /* MODIFIED: Reduced margin */
+        margin-bottom: 20px;
         text-align: left;
     }
     .copy-url-section p {
@@ -310,20 +311,18 @@ DASHBOARD_HTML = """
     .copy-input-wrapper button:hover { background: #333; }
     .copy-input-wrapper button:active { transform: scale(0.98); }
 
-    /* File Server Section (from FILES_HTML) */
     .files-panel h2 {
         font-size: 2rem;
         text-align: center;
-        margin-bottom: 20px; /* MODIFIED: Reduced margin */
-        padding-top: 15px; /* MODIFIED: Reduced padding */
+        margin-bottom: 20px;
+        padding-top: 15px;
         border-top: 1px solid #eee;
     }
 
-    /* Upload Form */
     .upload-form {
         text-align: center;
-        margin-bottom: 20px; /* MODIFIED: Reduced margin */
-        padding-bottom: 20px; /* MODIFIED: Reduced padding */
+        margin-bottom: 20px;
+        padding-bottom: 20px;
         border-bottom: 1px solid #eee;
     }
     .file-input-wrapper {
@@ -380,7 +379,45 @@ DASHBOARD_HTML = """
     .upload-button:hover { background: #333; }
     .upload-button:active { transform: scale(0.98); }
 
-    /* File List */
+    .progress-container {
+        display: none;
+        margin-top: 15px;
+    }
+    .progress-bar {
+        width: 100%;
+        height: 40px;
+        background-color: #f0f0f0;
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+    }
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        width: 0%;
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .speed-display {
+        margin-top: 10px;
+        text-align: center;
+        font-size: 0.9rem;
+        color: #555;
+        font-weight: 500;
+    }
+    .parallel-indicator {
+        margin-top: 8px;
+        text-align: center;
+        font-size: 0.85rem;
+        color: #667eea;
+        font-weight: 600;
+    }
+
     .files-header {
         font-size: 1.4rem;
         font-weight: 600;
@@ -389,7 +426,7 @@ DASHBOARD_HTML = """
     }
     .file-list {
         list-style: none;
-        max-height: 400px; /* Add scroll for many files */
+        max-height: 400px;
         overflow-y: auto;
     }
     .file-item {
@@ -421,10 +458,9 @@ DASHBOARD_HTML = """
         text-decoration: underline;
     }
     
-    /* --- Responsive --- */
     @media (max-width: 1024px) {
         .dashboard-container {
-            grid-template-columns: 1fr; /* Stack columns on smaller screens */
+            grid-template-columns: 1fr;
         }
         .qr-panel {
             border-right: none;
@@ -445,6 +481,7 @@ DASHBOARD_HTML = """
     
     <div class="qr-panel">
         <h2>Connect Device</h2>
+        
         <div class="step-box">
             <h3>Step 1: Connect to Hotspot</h3>
             <img src="{{ wifi_qr }}" alt="Wi-Fi QR Code">
@@ -474,7 +511,7 @@ DASHBOARD_HTML = """
         
         <h2>File Management</h2>
 
-        <form class="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+        <form class="upload-form" id="uploadForm" action="/upload_parallel" method="post" enctype="multipart/form-data">
             <div class="file-input-wrapper">
                 <input type="file" name="file" id="file-input" required>
                 <label for="file-input" class="file-input-label">
@@ -482,7 +519,14 @@ DASHBOARD_HTML = """
                     <span id="file-name-display"></span>
                 </label>
             </div>
-            <input type="submit" value="Upload File" class="upload-button">
+            <input type="submit" value="Upload File (Parallel)" class="upload-button">
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill">0%</div>
+                </div>
+                <div class="parallel-indicator" id="parallelIndicator"></div>
+                <div class="speed-display" id="speedDisplay"></div>
+            </div>
         </form>
 
         <h3 class="files-header">Uploaded Files</h3>
@@ -490,7 +534,7 @@ DASHBOARD_HTML = """
             {% for filename in files %}
             <li class="file-item">
                 <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" /></svg>
-                <a href="/files/{{ filename }}">{{ filename }}</a>
+                <a href="/download_parallel/{{ filename }}">{{ filename }}</a>
             </li>
             {% else %}
             <li class="file-item" style="color: #888;">No files uploaded yet.</li>
@@ -501,17 +545,15 @@ DASHBOARD_HTML = """
 </div>
 
 <script>
-// --- Copy URL Function ---
 function copyUrl() {
     var copyText = document.getElementById("urlToCopy");
     var copyButton = document.getElementById("copyButton");
     
     copyText.select();
-    copyText.setSelectionRange(0, 99999); // For mobile devices
+    copyText.setSelectionRange(0, 99999);
 
     try {
         var successful = document.execCommand('copy');
-        
         if (successful) {
             copyButton.textContent = "Copied!";
         } else {
@@ -527,7 +569,6 @@ function copyUrl() {
     }, 2000);
 }
 
-// --- File Input Display Function ---
 const fileInput = document.getElementById('file-input');
 const fileNameDisplay = document.getElementById('file-name-display');
 
@@ -538,38 +579,132 @@ fileInput.addEventListener('change', function() {
         fileNameDisplay.textContent = '';
     }
 });
+
+// Parallel upload with real-time speed calculation
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    const progressContainer = document.getElementById('progressContainer');
+    const progressFill = document.getElementById('progressFill');
+    const speedDisplay = document.getElementById('speedDisplay');
+    const parallelIndicator = document.getElementById('parallelIndicator');
+    
+    progressContainer.style.display = 'block';
+    parallelIndicator.textContent = '🚀 Using 4 parallel streams';
+    
+    const chunkSize = 512 * 1024; // 512KB chunks
+    const numStreams = 4;
+    const totalChunks = Math.ceil(file.size / chunkSize);
+    let completedChunks = 0;
+    let startTime = Date.now();
+    let uploadedBytes = 0;
+    
+    // Split file into chunks for parallel upload
+    const chunksPerStream = Math.ceil(totalChunks / numStreams);
+    const streams = [];
+    
+    for (let streamId = 0; streamId < numStreams; streamId++) {
+        const startChunk = streamId * chunksPerStream;
+        const endChunk = Math.min(startChunk + chunksPerStream, totalChunks);
+        
+        if (startChunk < totalChunks) {
+            streams.push({streamId, startChunk, endChunk});
+        }
+    }
+    
+    let activeStreams = streams.length;
+    
+    streams.forEach(stream => {
+        uploadStream(file, stream, chunkSize, function(progress, bytes) {
+            completedChunks += progress;
+            uploadedBytes += bytes;
+            
+            const percent = (completedChunks / totalChunks) * 100;
+            const elapsed = (Date.now() - startTime) / 1000;
+            const speed = uploadedBytes / elapsed / (1024 * 1024);
+            
+            progressFill.style.width = percent + '%';
+            progressFill.textContent = Math.round(percent) + '%';
+            speedDisplay.textContent = `Speed: ${speed.toFixed(2)} MB/s | Active Streams: ${activeStreams}`;
+        }, function() {
+            activeStreams--;
+            if (activeStreams === 0) {
+                progressFill.textContent = 'Complete!';
+                setTimeout(() => window.location.reload(), 500);
+            }
+        });
+    });
+});
+
+function uploadStream(file, stream, chunkSize, onProgress, onComplete) {
+    const {streamId, startChunk, endChunk} = stream;
+    let currentChunk = startChunk;
+    
+    function uploadNextChunk() {
+        if (currentChunk >= endChunk) {
+            onComplete();
+            return;
+        }
+        
+        const start = currentChunk * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        const chunk = file.slice(start, end);
+        
+        const formData = new FormData();
+        formData.append('chunk', chunk);
+        formData.append('chunkIndex', currentChunk);
+        formData.append('totalChunks', Math.ceil(file.size / chunkSize));
+        formData.append('filename', file.name);
+        formData.append('streamId', streamId);
+        
+        fetch('/upload_chunk', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                onProgress(1, chunk.size);
+                currentChunk++;
+                uploadNextChunk();
+            }
+        })
+        .catch(err => {
+            console.error('Stream ' + streamId + ' error:', err);
+            setTimeout(uploadNextChunk, 100);
+        });
+    }
+    
+    uploadNextChunk();
+}
 </script>
 </body>
 </html>
 """
 
-# This is the simple HTML for the mobile clients
 FILES_HTML = """
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>File Server - Dashboard</title>
+<title>File Server - Parallel Transfer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-    /* --- Reset & Base Styles --- */
-    * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: 'Poppins', Arial, sans-serif;
         display: grid;
         place-items: center;
         min-height: 100vh;
-        background-color: #121212; /* Dark background */
+        background-color: #121212;
         padding: 20px;
     }
-    /* --- Main Card Container --- */
     .files-container {
         width: 100%;
         max-width: 700px;
@@ -582,17 +717,25 @@ FILES_HTML = """
         text-align: center;
         font-size: 2.2rem;
         font-weight: 600;
-        margin-bottom: 30px;
+        margin-bottom: 15px;
         color: #000;
     }
-    /* --- Upload Form --- */
+    .performance-badge {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 20px;
+        text-align: center;
+        margin-bottom: 25px;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
     .upload-form {
         text-align: center;
         margin-bottom: 40px;
         padding-bottom: 30px;
         border-bottom: 1px solid #eee;
     }
-    /* --- Custom File Input --- */
     .file-input-wrapper {
         position: relative;
         margin-bottom: 20px;
@@ -624,16 +767,13 @@ FILES_HTML = """
         background-color: #f0f0f0;
         border-color: #999;
     }
-    .file-input-label span {
-        font-size: 1rem;
-    }
+    .file-input-label span { font-size: 1rem; }
     #file-name-display {
         font-size: 0.9rem;
         margin-top: 8px;
         color: #007BFF;
         font-weight: 600;
     }
-    /* --- Buttons --- */
     .upload-button {
         width: 100%;
         max-width: 250px;
@@ -649,16 +789,50 @@ FILES_HTML = """
     }
     .upload-button:hover { background: #333; }
     .upload-button:active { transform: scale(0.98); }
-    /* --- File List --- */
+    .progress-container {
+        display: none;
+        margin-top: 15px;
+    }
+    .progress-bar {
+        width: 100%;
+        height: 40px;
+        background-color: #f0f0f0;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        width: 0%;
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .speed-display {
+        margin-top: 10px;
+        text-align: center;
+        font-size: 0.9rem;
+        color: #555;
+        font-weight: 500;
+    }
+    .parallel-indicator {
+        margin-top: 8px;
+        text-align: center;
+        font-size: 0.85rem;
+        color: #667eea;
+        font-weight: 600;
+    }
     .files-header {
         font-size: 1.4rem;
         font-weight: 600;
         color: #333;
         margin-bottom: 15px;
     }
-    .file-list {
-        list-style: none;
-    }
+    .file-list { list-style: none; }
     .file-item {
         display: flex;
         align-items: center;
@@ -682,43 +856,23 @@ FILES_HTML = """
         text-decoration: none;
         color: #007BFF;
         font-weight: 500;
-        word-break: break-all; /* Prevents long filenames from overflowing */
+        word-break: break-all;
     }
     .file-item a:hover {
         text-decoration: underline;
     }
-    /* --- Logout Section --- */
-    .logout-section {
-        text-align: center;
-        margin-top: 30px;
-        padding-top: 20px;
-        border-top: 1px solid #eee;
-    }
-    .logout-link {
-        color: #888;
-        text-decoration: none;
-        font-weight: 500;
-        transition: color 0.3s ease;
-    }
-    .logout-link:hover {
-        color: #d93025; /* Red for emphasis on hover */
-    }
-    /* --- Mobile Responsive Adjustments --- */
     @media (max-width: 480px) {
-        .files-container {
-            padding: 30px 20px;
-        }
-        .files-container h2 {
-            font-size: 1.8rem;
-        }
+        .files-container { padding: 30px 20px; }
+        .files-container h2 { font-size: 1.8rem; }
     }
 </style>
 </head>
 <body>
 <div class="files-container">
     <h2>File Management</h2>
+    <div class="performance-badge">🚀 Parallel Transfer Mode Active</div>
 
-    <form class="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+    <form class="upload-form" id="uploadForm" action="/upload_parallel" method="post" enctype="multipart/form-data">
         <div class="file-input-wrapper">
             <input type="file" name="file" id="file-input" required>
             <label for="file-input" class="file-input-label">
@@ -727,6 +881,13 @@ FILES_HTML = """
             </label>
         </div>
         <input type="submit" value="Upload File" class="upload-button">
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div class="parallel-indicator" id="parallelIndicator"></div>
+            <div class="speed-display" id="speedDisplay"></div>
+        </div>
     </form>
 
     <h3 class="files-header">Uploaded Files</h3>
@@ -734,7 +895,7 @@ FILES_HTML = """
         {% for filename in files %}
         <li class="file-item">
             <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" /></svg>
-            <a href="/files/{{ filename }}">{{ filename }}</a>
+            <a href="/download_parallel/{{ filename }}">{{ filename }}</a>
         </li>
         {% else %}
         <li class="file-item" style="color: #888;">No files uploaded yet.</li>
@@ -752,12 +913,111 @@ FILES_HTML = """
             fileNameDisplay.textContent = '';
         }
     });
+
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const file = fileInput.files[0];
+        if (!file) return;
+        
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const speedDisplay = document.getElementById('speedDisplay');
+        const parallelIndicator = document.getElementById('parallelIndicator');
+        
+        progressContainer.style.display = 'block';
+        parallelIndicator.textContent = '🚀 Using 4 parallel streams';
+        
+        const chunkSize = 512 * 1024;
+        const numStreams = 4;
+        const totalChunks = Math.ceil(file.size / chunkSize);
+        let completedChunks = 0;
+        let startTime = Date.now();
+        let uploadedBytes = 0;
+        
+        const chunksPerStream = Math.ceil(totalChunks / numStreams);
+        const streams = [];
+        
+        for (let streamId = 0; streamId < numStreams; streamId++) {
+            const startChunk = streamId * chunksPerStream;
+            const endChunk = Math.min(startChunk + chunksPerStream, totalChunks);
+            
+            if (startChunk < totalChunks) {
+                streams.push({streamId, startChunk, endChunk});
+            }
+        }
+        
+        let activeStreams = streams.length;
+        
+        streams.forEach(stream => {
+            uploadStream(file, stream, chunkSize, function(progress, bytes) {
+                completedChunks += progress;
+                uploadedBytes += bytes;
+                
+                const percent = (completedChunks / totalChunks) * 100;
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = uploadedBytes / elapsed / (1024 * 1024);
+                
+                progressFill.style.width = percent + '%';
+                progressFill.textContent = Math.round(percent) + '%';
+                speedDisplay.textContent = `Speed: ${speed.toFixed(2)} MB/s | Active: ${activeStreams} streams`;
+            }, function() {
+                activeStreams--;
+                if (activeStreams === 0) {
+                    progressFill.textContent = 'Complete!';
+                    setTimeout(() => window.location.reload(), 500);
+                }
+            });
+        });
+    });
+
+    function uploadStream(file, stream, chunkSize, onProgress, onComplete) {
+        const {streamId, startChunk, endChunk} = stream;
+        let currentChunk = startChunk;
+        
+        function uploadNextChunk() {
+            if (currentChunk >= endChunk) {
+                onComplete();
+                return;
+            }
+            
+            const start = currentChunk * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunk = file.slice(start, end);
+            
+            const formData = new FormData();
+            formData.append('chunk', chunk);
+            formData.append('chunkIndex', currentChunk);
+            formData.append('totalChunks', Math.ceil(file.size / chunkSize));
+            formData.append('filename', file.name);
+            formData.append('streamId', streamId);
+            
+            fetch('/upload_chunk', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    onProgress(1, chunk.size);
+                    currentChunk++;
+                    uploadNextChunk();
+                }
+            })
+            .catch(err => {
+                console.error('Stream ' + streamId + ' error:', err);
+                setTimeout(uploadNextChunk, 100);
+            });
+        }
+        
+        uploadNextChunk();
+    }
 </script>
 </body>
 </html>
 """
 
-# ===== Helper to generate QR code as data URI =====
+# ===== Helper Functions =====
 def create_qr_data_uri(data):
     """Generates a QR code and returns it as a base64 data URI."""
     qr = qrcode.QRCode(
@@ -777,6 +1037,10 @@ def create_qr_data_uri(data):
     base64_data = base64.b64encode(byte_data).decode('utf-8')
     return f"data:image/png;base64,{base64_data}"
 
+def get_file_hash(filename):
+    """Generate a hash for the filename to use as transfer ID."""
+    return hashlib.md5(filename.encode()).hexdigest()
+
 # ===== Routes =====
 @app.route("/", methods=["GET", "POST"])
 def login():
@@ -784,13 +1048,6 @@ def login():
         return redirect(url_for("dashboard"))
     error = None
     if request.method == "POST":
-        
-        # --- DEBUGGING ---
-        print(f"--- DEBUGGING LOGIN ---")
-        print(f"Username from .env: '{ADMIN_USERNAME}' | Password from .env: '{ADMIN_PASSWORD}'")
-        print(f"Username from form: '{request.form['username']}' | Password from form: '{request.form['password']}'")
-        # ----------------------------------------
-
         if request.form["username"] == ADMIN_USERNAME and request.form["password"] == ADMIN_PASSWORD:
             session["logged_in"] = True
             return redirect(url_for("dashboard"))
@@ -800,22 +1057,18 @@ def login():
 
 @app.route("/dashboard")
 def dashboard():
-    # This page is protected. Only the PC user who logs in sees it.
     if "logged_in" not in session:
         return redirect(url_for("login"))
 
-    # 1. Generate Wi-Fi QR Code String
     wifi_string = f"WIFI:T:WPA;S:{HOTSPOT_SSID};P:{HOTSPOT_PASSWORD};;"
     wifi_qr_uri = create_qr_data_uri(wifi_string)
 
-    # 2. Generate URL QR Code String (links to /files)
     url_string = f"http://{HOTSPOT_IP}:{PORT}/files"
     url_qr_uri = create_qr_data_uri(url_string)
     
-    # 3. Get file list (for the dashboard's file management)
     file_list = os.listdir(UPLOAD_FOLDER)
+    file_list = [f for f in file_list if not f.startswith('.')]
 
-    # Pass all data to the new dashboard template
     return render_template_string(
         DASHBOARD_HTML, 
         wifi_qr=wifi_qr_uri, 
@@ -826,54 +1079,166 @@ def dashboard():
 
 @app.route("/files", methods=["GET"])
 def files():
-    # *** LOGIN CHECK REMOVED ***
-    # This is the simple page for mobile clients.
     file_list = os.listdir(UPLOAD_FOLDER)
+    file_list = [f for f in file_list if not f.startswith('.')]
     return render_template_string(FILES_HTML, files=file_list)
 
-@app.route("/upload", methods=["POST"])
-def upload():
-    file = request.files["file"]
-    save_path = os.path.join(UPLOAD_FOLDER, file.filename)
+@app.route("/upload_chunk", methods=["POST"])
+def upload_chunk():
+    """Handle individual chunk uploads from parallel streams."""
+    try:
+        chunk = request.files['chunk']
+        chunk_index = int(request.form['chunkIndex'])
+        total_chunks = int(request.form['totalChunks'])
+        filename = secure_filename(request.form['filename'])
+        stream_id = request.form.get('streamId', '0')
+        
+        transfer_id = get_file_hash(filename)
+        
+        # Store chunk in temporary location
+        temp_chunk_path = os.path.join(TEMP_FOLDER, f"{transfer_id}_chunk_{chunk_index}")
+        chunk.save(temp_chunk_path)
+        
+        # Track transfer progress
+        with transfer_lock:
+            if transfer_id not in active_transfers:
+                active_transfers[transfer_id] = {
+                    'filename': filename,
+                    'total_chunks': total_chunks,
+                    'received_chunks': set(),
+                    'start_time': time.time()
+                }
+            
+            active_transfers[transfer_id]['received_chunks'].add(chunk_index)
+            received = len(active_transfers[transfer_id]['received_chunks'])
+            
+            # Check if all chunks received
+            if received == total_chunks:
+                # Assemble file from chunks
+                final_path = os.path.join(UPLOAD_FOLDER, filename)
+                with open(final_path, 'wb') as outfile:
+                    for i in range(total_chunks):
+                        chunk_path = os.path.join(TEMP_FOLDER, f"{transfer_id}_chunk_{i}")
+                        if os.path.exists(chunk_path):
+                            with open(chunk_path, 'rb') as infile:
+                                outfile.write(infile.read())
+                            os.remove(chunk_path)
+                
+                elapsed = time.time() - active_transfers[transfer_id]['start_time']
+                file_size = os.path.getsize(final_path)
+                speed_mbps = (file_size / elapsed) / (1024 * 1024)
+                
+                print(f"✓ File assembled: {filename} ({file_size / (1024*1024):.2f} MB in {elapsed:.2f}s = {speed_mbps:.2f} MB/s)")
+                
+                del active_transfers[transfer_id]
+                
+                return jsonify({
+                    'success': True,
+                    'completed': True,
+                    'speed': speed_mbps
+                })
+        
+        return jsonify({
+            'success': True,
+            'completed': False,
+            'received': received,
+            'total': total_chunks
+        })
+        
+    except Exception as e:
+        print(f"Chunk upload error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-    with open(save_path, "wb", buffering=1024 * 1024) as f:
-        while True:
-            chunk = file.stream.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
-
+@app.route("/upload_parallel", methods=["POST"])
+def upload_parallel():
+    """Fallback for browsers that don't support chunked upload."""
+    try:
+        f = request.files["file"]
+        if f.filename:
+            filename = secure_filename(f.filename)
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            f.save(filepath)
+            print(f"File uploaded (fallback): {filename}")
+    except Exception as e:
+        print(f"Upload error: {e}")
+    
     if request.referrer and 'dashboard' in request.referrer:
         return redirect(url_for("dashboard"))
-    return redirect(url_for("files"))
+    else:
+        return redirect(url_for("files"))
 
-@app.route("/files/<filename>")
-def serve_file(filename):
-    # *** LOGIN CHECK REMOVED ***
-    # Anyone can download a file.
-    return send_from_directory(
-    UPLOAD_FOLDER,
-    filename,
-    as_attachment=True,
-    conditional=True
-)
+@app.route("/download_parallel/<filename>")
+def download_parallel(filename):
+    """Serve files with support for range requests (parallel download)."""
+    filepath = os.path.join(UPLOAD_FOLDER, secure_filename(filename))
+    
+    if not os.path.exists(filepath):
+        return "File not found", 404
+    
+    file_size = os.path.getsize(filepath)
+    
+    # Check for Range header (parallel download support)
+    range_header = request.headers.get('Range', None)
+    
+    if range_header:
+        # Parse range header
+        byte_range = range_header.replace('bytes=', '').split('-')
+        start = int(byte_range[0]) if byte_range[0] else 0
+        end = int(byte_range[1]) if byte_range[1] else file_size - 1
+        
+        length = end - start + 1
+        
+        def generate_range():
+            with open(filepath, 'rb') as f:
+                f.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk_size = min(CHUNK_SIZE, remaining)
+                    data = f.read(chunk_size)
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
+        
+        response = Response(generate_range(), 206, mimetype=mimetypes.guess_type(filename)[0])
+        response.headers['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+        response.headers['Content-Length'] = str(length)
+        response.headers['Accept-Ranges'] = 'bytes'
+        response.headers['Cache-Control'] = 'no-cache'
+        
+        return response
+    else:
+        # Regular download
+        def generate():
+            with open(filepath, 'rb') as f:
+                while True:
+                    chunk = f.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    yield chunk
+        
+        mimetype = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        response = Response(generate(), mimetype=mimetype)
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.headers['Content-Length'] = str(file_size)
+        response.headers['Accept-Ranges'] = 'bytes'
+        response.headers['Cache-Control'] = 'no-cache'
+        
+        return response
 
 @app.route("/logout")
 def logout():
-    # This is for the PC user.
     session.pop("logged_in", None)
     return redirect(url_for("login"))
 
 # ===== Run Server =====
 if __name__ == "__main__":
-    # Check if default values are still being used
     if HOTSPOT_SSID == "Priyank_" or HOTSPOT_PASSWORD == "12345678":
         print("="*50)
         print("!!! WARNING: Please edit your .env file !!!")
         print("You are using the default HOTSPOT_SSID or HOTSPOT_PASSWORD.")
         print("="*50)
     
-    # Check if any variables are missing
     if not all([HOTSPOT_SSID, HOTSPOT_PASSWORD, HOTSPOT_IP, PORT, ADMIN_USERNAME, ADMIN_PASSWORD, app.secret_key]):
         print("="*50)
         print("!!! ERROR: Missing configuration !!!")
@@ -881,11 +1246,29 @@ if __name__ == "__main__":
         print("Please check your .env file and ensure all variables are set.")
         print("="*50)
     else:
-        print(f"Server starting...")
-        print(f"1. Make sure your PC's hotspot is ON.")
-        print(f"   (SSID: {HOTSPOT_SSID})")
-        print(f"2. Access the server from THIS PC at:")
+        print(f"")
+        print(f"╔═══════════════════════════════════════════════════════════╗")
+        print(f"║   🚀 PARALLEL TRANSFER FILE SERVER - MAXIMUM SPEED 🚀    ║")
+        print(f"╚═══════════════════════════════════════════════════════════╝")
+        print(f"")
+        print(f"⚡ Performance Features:")
+        print(f"   • {NUM_PARALLEL_STREAMS} parallel TCP streams")
+        print(f"   • {CHUNK_SIZE / (1024*1024):.0f}MB chunks per stream")
+        print(f"   • Range request support for parallel downloads")
+        print(f"   • Real-time speed monitoring")
+        print(f"   • Up to 2GB file support")
+        print(f"")
+        print(f"📶 Network Configuration:")
+        print(f"   • Hotspot SSID: {HOTSPOT_SSID}")
+        print(f"   • Server IP: {HOTSPOT_IP}")
+        print(f"   • Port: {PORT}")
+        print(f"")
+        print(f"🖥️  Access from THIS PC:")
         print(f"   http://127.0.0.1:{PORT}")
-        print(f"After logging in, you will get the PC Dashboard.")
+        print(f"")
+        print(f"📱 Access from mobile devices:")
+        print(f"   1. Connect to hotspot: {HOTSPOT_SSID}")
+        print(f"   2. Open: http://{HOTSPOT_IP}:{PORT}/files")
+        print(f"")
         
-        serve(app, host="0.0.0.0", port=PORT, threads=8)
+        app.run(host="0.0.0.0", port=PORT, threaded=True)
