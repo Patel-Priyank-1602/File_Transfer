@@ -836,9 +836,9 @@ def upload():
     file = request.files["file"]
     save_path = os.path.join(UPLOAD_FOLDER, file.filename)
 
-    with open(save_path, "wb") as f:
+    with open(save_path, "wb", buffering=1024 * 1024) as f:
         while True:
-            chunk = file.stream.read(8192 * 8)  # 64KB chunks
+            chunk = file.stream.read(1024 * 1024)
             if not chunk:
                 break
             f.write(chunk)
