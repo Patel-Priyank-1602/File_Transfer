@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Server - Parallel Transfer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Poppins', Arial, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        background-color: #121212;
+        padding: 20px;
+    }
+    .files-container {
+        width: 100%;
+        max-width: 700px;
+        background: #ffffff;
+        padding: 40px 30px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+    .files-container h2 {
+        text-align: center;
+        font-size: 2.2rem;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #000;
+    }
+    .upload-form {
+        text-align: center;
+        margin-bottom: 40px;
+        padding-bottom: 30px;
+        border-bottom: 1px solid #eee;
+    }
+    .file-input-wrapper {
+        position: relative;
+        margin-bottom: 20px;
+    }
+    .file-input-wrapper input[type="file"] {
+        position: absolute;
+        width: 0.1px;
+        height: 0.1px;
+        opacity: 0;
+        overflow: hidden;
+        z-index: -1;
+    }
+    .file-input-label {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 120px;
+        padding: 20px;
+        background-color: #f7f7f7;
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.3s ease, border-color 0.3s ease;
+        font-weight: 500;
+        color: #555;
+    }
+    .file-input-label:hover {
+        background-color: #f0f0f0;
+        border-color: #999;
+    }
+    .file-input-label span { font-size: 1rem; }
+    #file-name-display {
+        font-size: 0.9rem;
+        margin-top: 8px;
+        color: #007BFF;
+        font-weight: 600;
+    }
+    .upload-button {
+        width: 100%;
+        max-width: 250px;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        background: #000;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.3s ease, transform 0.2s ease;
+    }
+    .upload-button:hover { background: #333; }
+    .upload-button:active { transform: scale(0.98); }
+    .upload-button:disabled {
+        background: #999;
+        cursor: not-allowed;
+    }
+    .progress-container {
+        display: none;
+        margin-top: 15px;
+    }
+    .progress-bar {
+        width: 100%;
+        height: 40px;
+        background-color: #f0f0f0;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #ccc;
+    }
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #000000 0%, #333333 100%);
+        width: 0%;
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .speed-display {
+        margin-top: 10px;
+        text-align: center;
+        font-size: 0.9rem;
+        color: #555;
+        font-weight: 500;
+    }
+    
+    .header-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .files-header {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0;
+    }
+
+    .refresh-btn {
+        background: transparent;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 6px 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.85rem;
+        color: #555;
+        transition: all 0.2s ease;
+    }
+
+    .refresh-btn:hover {
+        background: #f5f5f5;
+        color: #000;
+        border-color: #ccc;
+    }
+
+    .refresh-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .file-list { list-style: none; }
+    .file-item {
+        display: flex;
+        align-items: center;
+        padding: 15px;
+        border-radius: 8px;
+        transition: background-color 0.3s ease;
+    }
+    .file-item:not(:last-child) {
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .file-item:hover {
+        background-color: #f9f9f9;
+    }
+    .file-icon {
+        width: 24px;
+        height: 24px;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+    .file-item a {
+        text-decoration: none;
+        color: #007BFF;
+        font-weight: 500;
+        word-break: break-all;
+    }
+    .file-item a:hover {
+        text-decoration: underline;
+    }
+
+    /* Chat Button */
+    .chat-float-btn {
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #000000 0%, #333333 100%);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        transition: all 0.3s ease;
+        z-index: 999;
+        overflow: hidden;
+    }
+    .chat-float-btn:active {
+        transform: scale(0.95);
+    }
+    .chat-float-btn svg {
+        width: 32px;
+        height: 32px;
+        fill: white;
+    }
+    .chat-float-btn img {
+        width: 36px;
+        height: 36px;
+        object-fit: cover;
+    }
+    .chat-float-btn.has-messages::after {
+        content: '';
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 14px;
+        height: 14px;
+        background: #ff4757;
+        border-radius: 50%;
+        border: 2px solid white;
+        animation: pulse-dot 2s infinite;
+    }
+    @keyframes pulse-dot {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.8; }
+    }
+
+    /* Chat Popup */
+    .chat-popup {
+        position: fixed;
+        bottom: 95px;
+        right: 25px;
+        width: 380px;
+        height: 500px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        display: none;
+        flex-direction: column;
+        z-index: 1000;
+        overflow: hidden;
+    }
+    .chat-popup.active {
+        display: flex;
+        animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .chat-popup-header {
+        background: #000;
+        color: white;
+        padding: 15px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .chat-popup-header h3 {
+        font-size: 1.05rem;
+        margin: 0;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .username-display {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.15);
+        padding: 5px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+    }
+    .edit-username-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        padding: 3px 7px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.7rem;
+        font-family: inherit;
+        transition: background 0.2s;
+    }
+    .edit-username-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+    .online-indicator {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.8);
+    }
+    .online-dot {
+        width: 8px;
+        height: 8px;
+        background: #2ecc71;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .close-chat-btn {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 26px;
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: background 0.2s;
+    }
+    .close-chat-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .chat-messages-popup {
+        flex: 1;
+        overflow-y: auto;
+        padding: 15px;
+        background: #f7f7f7;
+    }
+    .chat-messages-popup::-webkit-scrollbar {
+        width: 6px;
+    }
+    .chat-messages-popup::-webkit-scrollbar-track {
+        background: #e0e0e0;
+    }
+    .chat-messages-popup::-webkit-scrollbar-thumb {
+        background: #999;
+        border-radius: 3px;
+    }
+
+    .chat-message {
+        margin-bottom: 12px;
+        animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    .message-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+    .message-username {
+        font-weight: 600;
+        color: #000;
+        font-size: 0.85rem;
+    }
+    .message-time {
+        font-size: 0.7rem;
+        color: #999;
+    }
+    .message-content {
+        background: white;
+        padding: 10px 12px;
+        border-radius: 10px;
+        word-wrap: break-word;
+        max-width: 85%;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+    .message-system {
+        text-align: center;
+        color: #999;
+        font-size: 0.75rem;
+        font-style: italic;
+        padding: 6px 0;
+    }
+
+    .chat-input-popup {
+        padding: 12px 15px;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+        display: flex;
+        gap: 8px;
+    }
+    .chat-input-popup input {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #ccc;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-family: 'Poppins', sans-serif;
+    }
+    .chat-input-popup input:focus {
+        outline: none;
+        border-color: #000;
+    }
+    .chat-input-popup button {
+        background: #000;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.9rem;
+        font-family: 'Poppins', sans-serif;
+        transition: background 0.2s;
+    }
+    .chat-input-popup button:hover {
+        background: #333;
+    }
+    .chat-input-popup button:disabled {
+        background: #999;
+        cursor: not-allowed;
+    }
+
+    .empty-chat-popup {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #999;
+        font-size: 0.9rem;
+    }
+
+    /* Username Setup */
+    .username-setup {
+        display: none;
+        padding: 20px;
+        background: white;
+        text-align: center;
+    }
+    .username-setup.active {
+        display: block;
+    }
+    .username-setup h4 {
+        color: #000;
+        margin-bottom: 15px;
+        font-size: 1rem;
+    }
+    .username-setup input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-family: 'Poppins', sans-serif;
+        margin-bottom: 12px;
+    }
+    .username-setup input:focus {
+        outline: none;
+        border-color: #000;
+    }
+    .username-setup button {
+        width: 100%;
+        padding: 12px;
+        background: #000;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Poppins', sans-serif;
+    }
+    .username-setup button:hover {
+        background: #333;
+    }
+    .username-setup p {
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 15px;
+    }
+
+    /* Username Edit Modal */
+    .username-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 10000;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+    .username-modal.active {
+        display: flex;
+    }
+    .username-modal-content {
+        background: white;
+        padding: 25px;
+        border-radius: 12px;
+        max-width: 350px;
+        width: 100%;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+    .username-modal-content h4 {
+        margin-bottom: 15px;
+        color: #000;
+        font-size: 1.1rem;
+    }
+    .username-modal-content input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-family: 'Poppins', sans-serif;
+        margin-bottom: 15px;
+    }
+    .username-modal-content input:focus {
+        outline: none;
+        border-color: #000;
+    }
+    .username-modal-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    .username-modal-buttons button {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Poppins', sans-serif;
+        transition: background 0.2s;
+    }
+    .username-modal-save {
+        background: #000;
+        color: white;
+    }
+    .username-modal-save:hover {
+        background: #333;
+    }
+    .username-modal-cancel {
+        background: #e0e0e0;
+        color: #333;
+    }
+    .username-modal-cancel:hover {
+        background: #d0d0d0;
+    }
+
+    @media (max-width: 480px) {
+        .files-container { padding: 30px 20px; }
+        .files-container h2 { font-size: 1.8rem; }
+        .chat-float-btn {
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            font-size: 24px;
+        }
+        .chat-popup {
+            bottom: 85px;
+            right: 15px;
+            left: 15px;
+            width: auto;
+            height: 450px;
+        }
+    }
+</style>
+</head>
+<body>
+<div class="files-container">
+    <h2>File Management</h2>
+
+    <form class="upload-form" id="uploadForm" action="/upload_parallel" method="post" enctype="multipart/form-data">
+        <div class="file-input-wrapper">
+            <input type="file" name="file" id="file-input" required>
+            <label for="file-input" class="file-input-label">
+                <span>Click to select a file</span>
+                <span id="file-name-display"></span>
+            </label>
+        </div>
+        <input type="submit" value="Upload File" class="upload-button" id="uploadButton">
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div class="speed-display" id="speedDisplay"></div>
+        </div>
+    </form>
+
+    <div class="header-wrapper">
+        <h3 class="files-header">Uploaded Files</h3>
+        <button id="refreshButton" class="refresh-btn" title="Refresh List">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+        </button>
+    </div>
+
+    <ul class="file-list">
+        {% for filename in files %}
+        <li class="file-item">
+            <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" /></svg>
+            <a href="/download_parallel/{{ filename }}">{{ filename }}</a>
+        </li>
+        {% else %}
+        <li class="file-item" style="color: #888;">No files uploaded yet.</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- Chat Float Button -->
+<button class="chat-float-btn" id="chatFloatBtn" onclick="toggleChat()">
+ <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+    </svg> 
+</button>
+
+<!-- Chat Popup -->
+<div class="chat-popup" id="chatPopup">
+    <div class="chat-popup-header">
+        <h3>Chat</h3>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="username-display" id="usernameDisplayHeader" style="display: none;">
+                <span id="currentUsernameText"></span>
+                <button class="edit-username-btn" onclick="openEditUsernameModal()">✏️</button>
+            </div>
+            <span class="online-indicator">
+                <span class="online-dot"></span>
+                <span>Online</span>
+            </span>
+            <button class="close-chat-btn" onclick="toggleChat()">×</button>
+        </div>
+    </div>
+    
+    <div class="chat-messages-popup" id="chatMessagesPopup">
+        <div class="username-setup active" id="usernameSetup">
+            <h4>👋 Welcome to Chat!</h4>
+            <p>Please enter your name before chatting</p>
+            <input type="text" id="usernameSetupInput" placeholder="Enter your name..." maxlength="20">
+            <button onclick="setupUsername()">Continue to Chat</button>
+        </div>
+        <div class="empty-chat-popup" id="emptyChatPopup">
+            <p>No messages yet</p>
+        </div>
+    </div>
+    
+    <div class="chat-input-popup">
+        <input type="text" id="chatInputPopup" placeholder="Type a message..." onkeypress="handleChatKeypressPopup(event)" maxlength="500">
+        <button id="sendBtnPopup" onclick="sendMessagePopup()">Send</button>
+    </div>
+</div>
+
+<!-- Username Edit Modal -->
+<div class="username-modal" id="usernameModal">
+    <div class="username-modal-content">
+        <h4>Edit Username</h4>
+        <input type="text" id="editUsernameInput" placeholder="Enter your name..." maxlength="20">
+        <div class="username-modal-buttons">
+            <button class="username-modal-cancel" onclick="closeEditUsernameModal()">Cancel</button>
+            <button class="username-modal-save" onclick="saveEditedUsername()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const fileInput = document.getElementById('file-input');
+    const fileNameDisplay = document.getElementById('file-name-display');
+    const uploadButton = document.getElementById('uploadButton');
+    
+    // Refresh Button Logic
+    document.getElementById('refreshButton').addEventListener('click', function() {
+        window.location.reload();
+    });
+
+    fileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            fileNameDisplay.textContent = `Selected: ${this.files[0].name}`;
+        } else {
+            fileNameDisplay.textContent = '';
+        }
+    });
+
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const file = fileInput.files[0];
+        if (!file) return;
+        
+        uploadButton.disabled = true;
+        uploadButton.value = 'Uploading...';
+        
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const speedDisplay = document.getElementById('speedDisplay');
+        
+        progressContainer.style.display = 'block';
+        
+        const chunkSize = 512 * 1024;
+        const numStreams = 4;
+        const totalChunks = Math.ceil(file.size / chunkSize);
+        let completedChunks = 0;
+        let startTime = Date.now();
+        let uploadedBytes = 0;
+        
+        const chunksPerStream = Math.ceil(totalChunks / numStreams);
+        const streams = [];
+        
+        for (let streamId = 0; streamId < numStreams; streamId++) {
+            const startChunk = streamId * chunksPerStream;
+            const endChunk = Math.min(startChunk + chunksPerStream, totalChunks);
+            
+            if (startChunk < totalChunks) {
+                streams.push({streamId, startChunk, endChunk});
+            }
+        }
+        
+        let activeStreams = streams.length;
+        
+        streams.forEach(stream => {
+            uploadStream(file, stream, chunkSize, function(progress, bytes) {
+                completedChunks += progress;
+                uploadedBytes += bytes;
+                
+                const percent = (completedChunks / totalChunks) * 100;
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = uploadedBytes / elapsed / (1024 * 1024);
+                
+                progressFill.style.width = percent + '%';
+                progressFill.textContent = Math.round(percent) + '%';
+                speedDisplay.textContent = `Speed: ${speed.toFixed(2)} MB/s`;
+            }, function() {
+                activeStreams--;
+                if (activeStreams === 0) {
+                    progressFill.textContent = 'Complete! ✓';
+                    speedDisplay.textContent = 'Upload successful! Refreshing...';
+                    setTimeout(() => window.location.reload(), 1000);
+                }
+            });
+        });
+    });
+
+    function uploadStream(file, stream, chunkSize, onProgress, onComplete) {
+        const {streamId, startChunk, endChunk} = stream;
+        let currentChunk = startChunk;
+        
+        function uploadNextChunk() {
+            if (currentChunk >= endChunk) {
+                onComplete();
+                return;
+            }
+            
+            const start = currentChunk * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunk = file.slice(start, end);
+            
+            const formData = new FormData();
+            formData.append('chunk', chunk);
+            formData.append('chunkIndex', currentChunk);
+            formData.append('totalChunks', Math.ceil(file.size / chunkSize));
+            formData.append('filename', file.name);
+            formData.append('streamId', streamId);
+            
+            fetch('/upload_chunk', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    onProgress(1, chunk.size);
+                    currentChunk++;
+                    uploadNextChunk();
+                }
+            })
+            .catch(err => {
+                console.error('Stream ' + streamId + ' error:', err);
+                setTimeout(uploadNextChunk, 100);
+            });
+        }
+        
+        uploadNextChunk();
+    }
+
+    // Chat functionality
+    const chatPopup = document.getElementById('chatPopup');
+    const chatMessagesPopup = document.getElementById('chatMessagesPopup');
+    const chatInputPopup = document.getElementById('chatInputPopup');
+    const sendBtnPopup = document.getElementById('sendBtnPopup');
+    const emptyChatPopup = document.getElementById('emptyChatPopup');
+    const chatFloatBtn = document.getElementById('chatFloatBtn');
+    const usernameSetup = document.getElementById('usernameSetup');
+    const usernameSetupInput = document.getElementById('usernameSetupInput');
+    const usernameDisplayHeader = document.getElementById('usernameDisplayHeader');
+    const currentUsernameText = document.getElementById('currentUsernameText');
+    const usernameModal = document.getElementById('usernameModal');
+    const editUsernameInput = document.getElementById('editUsernameInput');
+    let chatOpen = false;
+    let lastMessageCount = 0;
+    let usernameConfigured = false;
+    let currentUsername = '';
+
+    function toggleChat() {
+        chatOpen = !chatOpen;
+        if (chatOpen) {
+            chatPopup.classList.add('active');
+            if (!usernameConfigured) {
+                usernameSetupInput.focus();
+            } else {
+                chatInputPopup.focus();
+            }
+            scrollChatToBottom();
+            chatFloatBtn.classList.remove('has-messages');
+        } else {
+            chatPopup.classList.remove('active');
+        }
+    }
+
+    function setupUsername() {
+        const username = usernameSetupInput.value.trim();
+        
+        if (!username) {
+            alert('Please enter a name');
+            return;
+        }
+        
+        if (username.length > 20) {
+            alert('Name must be 20 characters or less');
+            return;
+        }
+        
+        // Set username on server
+        fetch('/chat/set_username', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username: username })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUsername = data.username;
+                currentUsernameText.textContent = currentUsername;
+                usernameConfigured = true;
+                usernameSetup.classList.remove('active');
+                usernameDisplayHeader.style.display = 'flex';
+                chatInputPopup.disabled = false;
+                sendBtnPopup.disabled = false;
+                chatInputPopup.focus();
+                
+                // Load chat history now
+                loadChatHistory();
+                startChatListener();
+            } else {
+                alert('Failed to set username: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error setting username:', error);
+            alert('Error setting username. Please try again.');
+        });
+    }
+
+    function openEditUsernameModal() {
+        editUsernameInput.value = currentUsername;
+        usernameModal.classList.add('active');
+        editUsernameInput.focus();
+        editUsernameInput.select();
+    }
+
+    function closeEditUsernameModal() {
+        usernameModal.classList.remove('active');
+    }
+
+    function saveEditedUsername() {
+        const username = editUsernameInput.value.trim();
+        
+        if (!username) {
+            alert('Please enter a name');
+            return;
+        }
+        
+        if (username.length > 20) {
+            alert('Name must be 20 characters or less');
+            return;
+        }
+        
+        if (username === currentUsername) {
+            closeEditUsernameModal();
+            return;
+        }
+        
+        fetch('/chat/set_username', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username: username })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUsername = data.username;
+                currentUsernameText.textContent = currentUsername;
+                closeEditUsernameModal();
+            } else {
+                alert('Failed to change username: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error changing username:', error);
+            alert('Error changing username. Please try again.');
+        });
+    }
+
+    function loadChatHistory() {
+        fetch('/chat/history')
+            .then(response => response.json())
+            .then(messages => {
+                if (messages.length > 0) {
+                    emptyChatPopup.style.display = 'none';
+                    messages.forEach(msg => displayChatMessage(msg));
+                    scrollChatToBottom();
+                    lastMessageCount = messages.length;
+                }
+            });
+    }
+
+    function startChatListener() {
+        // Listen for new messages
+        const chatEventSource = new EventSource('/chat/messages');
+        chatEventSource.onmessage = function(event) {
+            const messages = JSON.parse(event.data);
+            if (messages.length > 0) {
+                emptyChatPopup.style.display = 'none';
+                messages.forEach(msg => displayChatMessage(msg));
+                scrollChatToBottom();
+                
+                if (!chatOpen && messages.length > lastMessageCount) {
+                    chatFloatBtn.classList.add('has-messages');
+                }
+                lastMessageCount = messages.length;
+            }
+        };
+    }
+
+    // Disable input initially
+    chatInputPopup.disabled = true;
+    sendBtnPopup.disabled = true;
+
+    // Handle Enter key in username setup
+    usernameSetupInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            setupUsername();
+        }
+    });
+
+    // Handle Enter key in edit modal
+    editUsernameInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            saveEditedUsername();
+        }
+    });
+
+    // Close modal when clicking outside
+    usernameModal.addEventListener('click', function(e) {
+        if (e.target === usernameModal) {
+            closeEditUsernameModal();
+        }
+    });
+
+    function displayChatMessage(msg) {
+        const existingMessages = Array.from(chatMessagesPopup.children);
+        const isDuplicate = existingMessages.some(el => {
+            if (el.classList.contains('empty-chat-popup')) return false;
+            const timeEl = el.querySelector('.message-time');
+            const usernameEl = el.querySelector('.message-username');
+            const contentEl = el.querySelector('.message-content');
+            
+            return timeEl && usernameEl && contentEl &&
+                   timeEl.textContent === msg.timestamp &&
+                   usernameEl.textContent === msg.username &&
+                   contentEl.textContent === msg.message;
+        });
+        
+        if (isDuplicate) return;
+        
+        if (msg.type === 'system') {
+            const systemMsg = document.createElement('div');
+            systemMsg.className = 'message-system';
+            systemMsg.textContent = msg.message;
+            chatMessagesPopup.appendChild(systemMsg);
+        } else {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="message-username">${escapeHtml(msg.username)}</span>
+                    <span class="message-time">${msg.timestamp}</span>
+                </div>
+                <div class="message-content">${escapeHtml(msg.message)}</div>
+            `;
+            chatMessagesPopup.appendChild(messageDiv);
+        }
+    }
+
+    function sendMessagePopup() {
+        const message = chatInputPopup.value.trim();
+        if (!message) return;
+
+        sendBtnPopup.disabled = true;
+        
+        fetch('/chat/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ message: message })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                chatInputPopup.value = '';
+            }
+            sendBtnPopup.disabled = false;
+            chatInputPopup.focus();
+        })
+        .catch(error => {
+            console.error('Error sending message:', error);
+            sendBtnPopup.disabled = false;
+        });
+    }
+
+    function handleChatKeypressPopup(event) {
+        if (event.key === 'Enter') {
+            sendMessagePopup();
+        }
+    }
+
+    function scrollChatToBottom() {
+        chatMessagesPopup.scrollTop = chatMessagesPopup.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+</script>
+</body>
+</html>
