@@ -187,6 +187,13 @@
         margin-right: 15px;
         flex-shrink: 0;
     }
+    .file-name {
+        flex: 1;
+        color: #333;
+        font-weight: 500;
+        word-break: break-all;
+        font-size: 0.95rem;
+    }
     .file-item a {
         text-decoration: none;
         color: #007BFF;
@@ -195,6 +202,38 @@
     }
     .file-item a:hover {
         text-decoration: underline;
+    }
+    .download-link {
+        padding: 8px 16px;
+        background: #414141;
+        color: white !important;
+        border-radius: 6px;
+        text-decoration: none !important;
+        font-size: 0.9rem;
+        transition: all 0.3s;
+        white-space: nowrap;
+    }
+    .download-link:hover {
+        background: #000000;
+    }
+    .download-link.disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+    .assembling-badge {
+        padding: 6px 12px;
+        background: #8b8b8b;
+        color: #000;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+        animation: pulse-badge 1.5s infinite;
+    }
+    @keyframes pulse-badge {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
     }
 
     /* Chat Button */
@@ -642,9 +681,11 @@
 
     <ul class="file-list">
         {% for filename in files %}
-        <li class="file-item">
+        <li class="file-item" data-filename="{{ filename }}">
             <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" /></svg>
-            <a href="/download_parallel/{{ filename }}">{{ filename }}</a>
+            <span class="file-name">{{ filename }}</span>
+            <a href="/download_parallel/{{ filename }}" class="download-link" data-filename="{{ filename }}">Download</a>
+            <span class="assembling-badge" style="display: none;">⏳ Assembling...</span>
         </li>
         {% else %}
         <li class="file-item" style="color: #888;">No files uploaded yet.</li>
@@ -654,7 +695,7 @@
 
 <!-- Chat Float Button -->
 <button class="chat-float-btn" id="chatFloatBtn" onclick="toggleChat()">
- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
         <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
     </svg> 
 </button>
@@ -739,7 +780,7 @@
         
         progressContainer.style.display = 'block';
         
-        const chunkSize = 512 * 1024;
+        const chunkSize = 1 * 1024 * 1024; // 1MB chunks (better for large files)
         const numStreams = 4;
         const totalChunks = Math.ceil(file.size / chunkSize);
         let completedChunks = 0;
@@ -786,9 +827,12 @@
     function uploadStream(file, stream, chunkSize, onProgress, onComplete) {
         const {streamId, startChunk, endChunk} = stream;
         let currentChunk = startChunk;
+        let retryCount = 0;
+        const MAX_RETRIES = 5;
         
         function uploadNextChunk() {
             if (currentChunk >= endChunk) {
+                console.log(`Stream ${streamId} completed`);
                 onComplete();
                 return;
             }
@@ -804,26 +848,91 @@
             formData.append('filename', file.name);
             formData.append('streamId', streamId);
             
+            console.log(`Stream ${streamId}: Uploading chunk ${currentChunk} (${chunk.size} bytes)`);
+            
             fetch('/upload_chunk', {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
+                    console.log(`Stream ${streamId}: Chunk ${currentChunk} uploaded successfully`);
                     onProgress(1, chunk.size);
                     currentChunk++;
+                    retryCount = 0; // Reset retry count on success
                     uploadNextChunk();
+                } else {
+                    throw new Error(data.error || 'Upload failed');
                 }
             })
             .catch(err => {
-                console.error('Stream ' + streamId + ' error:', err);
-                setTimeout(uploadNextChunk, 100);
+                console.error(`Stream ${streamId} chunk ${currentChunk} error:`, err);
+                retryCount++;
+                
+                if (retryCount < MAX_RETRIES) {
+                    console.log(`Stream ${streamId}: Retrying chunk ${currentChunk} (attempt ${retryCount}/${MAX_RETRIES})`);
+                    setTimeout(uploadNextChunk, 1000 * retryCount); // Exponential backoff
+                } else {
+                    console.error(`Stream ${streamId}: Failed after ${MAX_RETRIES} retries`);
+                    alert(`Upload failed for chunk ${currentChunk}. Please try again.`);
+                }
             });
         }
         
         uploadNextChunk();
     }
+
+    // Monitor file assembly status
+    function checkFileStatus() {
+        fetch('/file_status')
+            .then(response => response.json())
+            .then(data => {
+                const assemblingFiles = data.assembling || [];
+                
+                // Update UI for all files
+                document.querySelectorAll('.file-item').forEach(item => {
+                    const filename = item.dataset.filename;
+                    if (!filename) return;
+                    
+                    const downloadLink = item.querySelector('.download-link');
+                    const assemblingBadge = item.querySelector('.assembling-badge');
+                    
+                    if (assemblingFiles.includes(filename)) {
+                        // File is being assembled
+                        if (downloadLink) {
+                            downloadLink.classList.add('disabled');
+                            downloadLink.style.display = 'none';
+                        }
+                        if (assemblingBadge) {
+                            assemblingBadge.style.display = 'inline-block';
+                        }
+                    } else {
+                        // File is ready
+                        if (downloadLink) {
+                            downloadLink.classList.remove('disabled');
+                            downloadLink.style.display = 'inline-block';
+                        }
+                        if (assemblingBadge) {
+                            assemblingBadge.style.display = 'none';
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error checking file status:', error);
+            });
+    }
+
+    // Check file status every 2 seconds
+    setInterval(checkFileStatus, 2000);
+    // Check immediately on page load
+    checkFileStatus();
 
     // Chat functionality
     const chatPopup = document.getElementById('chatPopup');

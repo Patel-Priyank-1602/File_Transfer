@@ -30,12 +30,12 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 
 # Performance Configuration
-CHUNK_SIZE = 2 * 1024 * 1024  # 2MB chunks
-MAX_CONTENT_LENGTH = 2000 * 1024 * 1024  # 2GB max
+CHUNK_SIZE = 2 * 1024 * 1024  # 2MB chunks for download
+MAX_CONTENT_LENGTH = 10 * 1024 * 1024 * 1024  # 10GB max file size
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 NUM_PARALLEL_STREAMS = 4
-STREAM_CHUNK_SIZE = 512 * 1024  # 512KB
+STREAM_CHUNK_SIZE = 1 * 1024 * 1024  # 1MB chunks for upload (better for large files)
 
 # Upload Folder
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "shared_files")
@@ -47,6 +47,10 @@ os.makedirs(TEMP_FOLDER, exist_ok=True)
 executor = ThreadPoolExecutor(max_workers=NUM_PARALLEL_STREAMS * 4)
 active_transfers = {}
 transfer_lock = threading.Lock()
+
+# Track files being assembled (prevent download during assembly)
+assembling_files = set()
+assembling_lock = threading.Lock()
 
 # Chat Configuration
 chat_messages = []
@@ -126,6 +130,10 @@ def dashboard():
 
     # Get username
     username = get_username()
+    
+    # Check which files are being assembled
+    with assembling_lock:
+        assembling_list = list(assembling_files)
 
     return render_template(
         "dashboard.html",
@@ -133,14 +141,20 @@ def dashboard():
         url_qr=url_qr_uri,
         url_string_for_copy=url_string,
         files=file_list,
-        username=username
+        username=username,
+        assembling_files=assembling_list
     )
 
 @app.route("/files", methods=["GET"])
 def files():
     file_list = [f for f in os.listdir(UPLOAD_FOLDER) if not f.startswith('.')]
     username = get_username()
-    return render_template("files.html", files=file_list, username=username)
+    
+    # Check which files are being assembled
+    with assembling_lock:
+        assembling_list = list(assembling_files)
+    
+    return render_template("files.html", files=file_list, username=username, assembling_files=assembling_list)
 
 @app.route("/upload_chunk", methods=["POST"])
 def upload_chunk():
@@ -157,6 +171,14 @@ def upload_chunk():
         temp_chunk_path = os.path.join(TEMP_FOLDER, f"{transfer_id}_chunk_{chunk_index}")
         chunk.save(temp_chunk_path)
         
+        # Verify chunk was saved
+        if not os.path.exists(temp_chunk_path):
+            print(f"ERROR: Chunk {chunk_index} not saved!")
+            return jsonify({'success': False, 'error': 'Chunk save failed'}), 500
+        
+        chunk_size = os.path.getsize(temp_chunk_path)
+        print(f"✓ Chunk {chunk_index}/{total_chunks} saved ({chunk_size} bytes)")
+        
         # Track progress
         with transfer_lock:
             if transfer_id not in active_transfers:
@@ -165,42 +187,100 @@ def upload_chunk():
                     'total_chunks': total_chunks,
                     'received_chunks': set(),
                     'start_time': time.time(),
-                    'total_bytes': 0
+                    'total_bytes': 0,
+                    'chunk_sizes': {}
                 }
             
             active_transfers[transfer_id]['received_chunks'].add(chunk_index)
-            active_transfers[transfer_id]['total_bytes'] += os.path.getsize(temp_chunk_path)
+            active_transfers[transfer_id]['chunk_sizes'][chunk_index] = chunk_size
+            active_transfers[transfer_id]['total_bytes'] += chunk_size
             received = len(active_transfers[transfer_id]['received_chunks'])
+            
+            print(f"Progress: {received}/{total_chunks} chunks received")
             
             # Check if complete
             if received == total_chunks:
+                print(f"All chunks received! Assembling file: {filename}")
+                
+                # Mark file as being assembled
+                with assembling_lock:
+                    assembling_files.add(filename)
+                
                 final_path = os.path.join(UPLOAD_FOLDER, filename)
-                with open(final_path, 'wb') as outfile:
+                
+                # Assemble file
+                try:
+                    with open(final_path, 'wb') as outfile:
+                        for i in range(total_chunks):
+                            chunk_path = os.path.join(TEMP_FOLDER, f"{transfer_id}_chunk_{i}")
+                            
+                            if not os.path.exists(chunk_path):
+                                print(f"ERROR: Missing chunk {i}!")
+                                raise Exception(f"Missing chunk {i}")
+                            
+                            with open(chunk_path, 'rb') as infile:
+                                chunk_data = infile.read()
+                                outfile.write(chunk_data)
+                                print(f"  Wrote chunk {i}: {len(chunk_data)} bytes")
+                            
+                            os.remove(chunk_path)
+                    
+                    # Verify file size
+                    final_size = os.path.getsize(final_path)
+                    expected_size = sum(active_transfers[transfer_id]['chunk_sizes'].values())
+                    
+                    print(f"File assembled: {final_size} bytes (expected: {expected_size} bytes)")
+                    
+                    if final_size != expected_size:
+                        print(f"WARNING: Size mismatch! Got {final_size}, expected {expected_size}")
+                    
+                    elapsed = time.time() - active_transfers[transfer_id]['start_time']
+                    speed_mbps = (final_size / elapsed) / (1024 * 1024)
+                    
+                    print(f"✓✓✓ Upload complete: {filename} ({final_size / (1024*1024):.2f} MB in {elapsed:.2f}s = {speed_mbps:.2f} MB/s)")
+                    
+                    # Mark file as ready for download
+                    with assembling_lock:
+                        if filename in assembling_files:
+                            assembling_files.remove(filename)
+                    
+                    # Add system message to chat
+                    username = get_username()
+                    add_chat_message('System', f'{username} uploaded {filename} ({final_size / (1024*1024):.2f} MB)', 'system')
+                    
+                    del active_transfers[transfer_id]
+                    
+                    return jsonify({'success': True, 'completed': True, 'speed': speed_mbps, 'size': final_size})
+                
+                except Exception as e:
+                    print(f"ERROR assembling file: {e}")
+                    
+                    # Remove from assembling list
+                    with assembling_lock:
+                        if filename in assembling_files:
+                            assembling_files.remove(filename)
+                    
+                    # Clean up chunks on error
                     for i in range(total_chunks):
                         chunk_path = os.path.join(TEMP_FOLDER, f"{transfer_id}_chunk_{i}")
                         if os.path.exists(chunk_path):
-                            with open(chunk_path, 'rb') as infile:
-                                outfile.write(infile.read())
                             os.remove(chunk_path)
-                
-                elapsed = time.time() - active_transfers[transfer_id]['start_time']
-                file_size = os.path.getsize(final_path)
-                speed_mbps = (file_size / elapsed) / (1024 * 1024)
-                
-                print(f"✓ File assembled: {filename} ({file_size / (1024*1024):.2f} MB in {elapsed:.2f}s = {speed_mbps:.2f} MB/s)")
-                
-                # Add system message to chat
-                username = get_username()
-                add_chat_message('System', f'{username} uploaded {filename}', 'system')
-                
-                del active_transfers[transfer_id]
-                
-                return jsonify({'success': True, 'completed': True, 'speed': speed_mbps})
+                    
+                    # Remove incomplete file
+                    if os.path.exists(final_path):
+                        os.remove(final_path)
+                    
+                    if transfer_id in active_transfers:
+                        del active_transfers[transfer_id]
+                    
+                    return jsonify({'success': False, 'error': str(e)}), 500
         
         return jsonify({'success': True, 'completed': False, 'received': received, 'total': total_chunks})
         
     except Exception as e:
         print(f"Chunk upload error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/upload_progress")
@@ -258,6 +338,14 @@ def upload_parallel():
 @app.route("/download_parallel/<filename>")
 def download_parallel(filename):
     filepath = os.path.join(UPLOAD_FOLDER, secure_filename(filename))
+    
+    # Check if file is still being assembled
+    with assembling_lock:
+        if filename in assembling_files:
+            return jsonify({
+                'error': 'File is still being assembled. Please wait...',
+                'assembling': True
+            }), 425  # Too Early status code
     
     if not os.path.exists(filepath):
         return "File not found", 404
@@ -385,6 +473,14 @@ def chat_page():
     username = get_username()
     return render_template("chat_app.html", username=username)
 
+@app.route("/file_status")
+def file_status():
+    """Get status of all files (ready or assembling)"""
+    with assembling_lock:
+        return jsonify({
+            'assembling': list(assembling_files)
+        })
+
 @app.route("/logout")
 def logout():
     username = session.get('username', 'User')
@@ -420,7 +516,7 @@ if __name__ == "__main__":
         print(f"   • {CHUNK_SIZE / (1024*1024):.0f}MB chunks per stream")
         print(f"   • Range request support for parallel downloads")
         print(f"   • Real-time speed monitoring")
-        print(f"   • Up to 2GB file support")
+        print(f"   • Up to 10GB file support")
         print(f"   • 💬 Real-time chat between users")
         print(f"")
         print(f"📶 Network Configuration:")
