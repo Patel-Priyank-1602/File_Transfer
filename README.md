@@ -100,10 +100,18 @@ ip addr show
 
 ## 🗂️ Project Structure
 ```bash
-file-transfer/
-├── app.py              # Flask main app
-├── .env                # Configuration file
-├── .gitignore          # Ignored files
-├── README.md           # Documentation
-└── shared_files/       # Uploaded files
+FILE_TRANSFER/
+├─ Screenshot/
+├─ shared_files/
+│  └─ .temp/
+├─ templates/
+│  ├─ chat_app.html
+│  ├─ dashboard.html
+│  ├─ files.html
+│  └─ login.html
+├─ .env
+├─ .gitignore
+├─ app.py
+├─ README.md
+└─ site_config.json
 ```
