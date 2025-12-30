@@ -1,1355 +1,2402 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PC Dashboard - Parallel Transfer Server</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-        font-family: 'Poppins', Arial, sans-serif;
-        min-height: 100vh;
-        background-color: #121212;
-        color: #333;
-        padding: 20px;
-    }
-    h2, h3 { font-weight: 600; color: #000; }
-    
-    .dashboard-container {
-        display: grid;
-        grid-template-columns: 1fr 1.5fr;
-        gap: 30px;
-        width: 100%;
-        max-width: 1400px;
-        margin: 0 auto;
-        background: #ffffff;
-        padding: 20px 30px;
-        border-radius: 12px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    }
-    
-    .qr-panel {
-        padding: 10px;
-        border-right: 1px solid #eee;
-    }
-    .qr-panel h2 {
-        font-size: 2rem;
-        margin-bottom: 20px;
-        text-align: center;
-    }
-    .step-box {
-        padding: 20px;
-        border: 1px solid #eee;
-        border-radius: 8px;
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    .step-box h3 {
-        font-size: 1.4rem;
-        margin-bottom: 15px;
-    }
-    .step-box img {
-        width: 100%;
-        max-width: 200px;
-        height: auto;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        margin-bottom: 15px;
-    }
-    .step-box p {
-        font-size: 1rem;
-        color: #555;
-    }
-    
-    .logout-section {
-        text-align: center;
-        margin-top: 20px;
-        padding-top: 15px;
-        border-top: 1px solid #eee;
-    }
-    .logout-link {
-        color: #888;
-        text-decoration: none;
-        font-weight: 500;
-        transition: color 0.3s ease;
-        font-size: 1.1rem;
-    }
-    .logout-link:hover { color: #d93025; }
-
-    .files-panel { padding: 10px; }
-    
-    .copy-url-section {
-        margin-bottom: 20px;
-        text-align: left;
-    }
-    .copy-url-section p {
-        font-size: 1rem;
-        font-weight: 500;
-        color: #555;
-        margin-bottom: 10px;
-    }
-    .copy-input-wrapper {
-        display: flex;
-        width: 100%;
-    }
-    .copy-input-wrapper input[type="text"] {
-        flex-grow: 1;
-        padding: 10px 15px;
-        font-family: 'Poppins', monospace;
-        font-size: 1rem;
-        border: 1px solid #ccc;
-        border-radius: 8px 0 0 8px;
-        background-color: #f7f7f7;
-        color: #333;
-        border-right: none;
-        outline: none;
-    }
-    .copy-input-wrapper button {
-        padding: 10px 20px;
-        border: 1px solid #000;
-        border-radius: 0 8px 8px 0;
-        background: #000;
-        color: white;
-        font-family: 'Poppins', sans-serif;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    .copy-input-wrapper button:hover { background: #333; }
-    .copy-input-wrapper button:active { transform: scale(0.98); }
-
-    .files-panel h2 {
-        font-size: 2rem;
-        text-align: center;
-        margin-bottom: 20px;
-        padding-top: 15px;
-        border-top: 1px solid #eee;
-    }
-
-    .upload-form {
-        text-align: center;
-        margin-bottom: 20px;
-        padding-bottom: 20px;
-        border-bottom: 1px solid #eee;
-    }
-    .file-input-wrapper {
-        position: relative;
-        margin-bottom: 20px;
-    }
-    .file-input-wrapper input[type="file"] {
-        position: absolute;
-        width: 0.1px;
-        height: 0.1px;
-        opacity: 0;
-        overflow: hidden;
-        z-index: -1;
-    }
-    .file-input-label {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        height: 120px;
-        padding: 20px;
-        background-color: #f7f7f7;
-        border: 2px dashed #ccc;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background-color 0.3s ease, border-color 0.3s ease;
-        font-weight: 500;
-        color: #555;
-    }
-    .file-input-label:hover {
-        background-color: #f0f0f0;
-        border-color: #999;
-    }
-    .file-input-label span { font-size: 1rem; }
-    #file-name-display {
-        font-size: 0.9rem;
-        margin-top: 8px;
-        color: #007BFF;
-        font-weight: 600;
-    }
-    .upload-button {
-        width: 100%;
-        max-width: 250px;
-        padding: 12px 20px;
-        border: none;
-        border-radius: 8px;
-        background: #000;
-        color: white;
-        font-size: 1.1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color 0.3s ease, transform 0.2s ease;
-    }
-    .upload-button:hover { background: #333; }
-    .upload-button:active { transform: scale(0.98); }
-
-    .progress-container {
-        display: none;
-        margin-top: 15px;
-    }
-    .progress-bar {
-        width: 100%;
-        height: 40px;
-        background-color: #f0f0f0;
-        border-radius: 8px;
-        overflow: hidden;
-        position: relative;
-        border: 1px solid #ccc;
-    }
-    .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #000000 0%, #333333 100%); 
-        width: 0%;
-        transition: width 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 600;
-        font-size: 0.9rem;
-    }
-    .speed-display {
-        margin-top: 10px;
-        text-align: center;
-        font-size: 0.9rem;
-        color: #555;
-        font-weight: 500;
-    }
-
-    .files-header-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-    }
-    .files-header {
-        font-size: 1.4rem;
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 0;
-    }
-    .refresh-btn {
-        padding: 6px 16px;
-        border: 1px solid #000;
-        background: white;
-        color: #000;
-        border-radius: 6px;
-        cursor: pointer;
-        font-family: 'Poppins', sans-serif;
-        font-size: 0.9rem;
-        font-weight: 500;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-    }
-    .refresh-btn:hover {
-        background: #f0f0f0;
-        transform: translateY(-1px);
-    }
-
-    .file-list {
-        list-style: none;
-        max-height: 400px;
-        overflow-y: auto;
-    }
-    .file-item {
-        display: flex;
-        align-items: center;
-        padding: 15px;
-        border-radius: 8px;
-        transition: background-color 0.3s ease;
-    }
-    .file-item:not(:last-child) {
-        border-bottom: 1px solid #f0f0f0;
-    }
-    .file-item:hover {
-        background-color: #f9f9f9;
-    }
-    .file-icon {
-        width: 24px;
-        height: 24px;
-        margin-right: 15px;
-        flex-shrink: 0;
-    }
-    .file-name {
-        flex: 1;
-        color: #333;
-        font-weight: 500;
-        word-break: break-all;
-    }
-    .file-item a {
-        text-decoration: none;
-        color: #007BFF;
-        font-weight: 500;
-        word-break: break-all;
-    }
-    .file-item a:hover {
-        text-decoration: underline;
-    }
-    .download-link {
-        padding: 8px 16px;
-        background: #414141;
-        color: white !important;
-        border-radius: 6px;
-        text-decoration: none !important;
-        font-size: 0.9rem;
-        transition: all 0.3s;
-    }
-    .download-link:hover {
-        background: #000000;
-        transform: translateY(-1px);
-    }
-    .download-link.disabled {
-        background: #ccc;
-        cursor: not-allowed;
-        pointer-events: none;
-    }
-    .assembling-badge {
-        padding: 6px 12px;
-        background: #8b8b8b;
-        color: #000;
-        border-radius: 15px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        animation: pulse-badge 1.5s infinite;
-    }
-    @keyframes pulse-badge {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
-    }
-
-    /* Chat Button */
-    .chat-float-btn {
-        position: fixed;
-        bottom: 30px;
-        right: 30px;
-        width: 60px;
-        height: 60px;
-        background: linear-gradient(135deg, #000000 0%, #333333 100%);
-        color: white;
-        border: none;
-        border-radius: 50%;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 28px;
-        transition: all 0.3s ease;
-        z-index: 999;
-        overflow: hidden;
-    }
-    .chat-float-btn:hover {
-        transform: scale(1.1);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-    }
-    .chat-float-btn svg {
-        width: 32px;
-        height: 32px;
-        fill: white;
-    }
-    .chat-float-btn img {
-        width: 36px;
-        height: 36px;
-        object-fit: cover;
-    }
-    .chat-float-btn.has-messages::after {
-        content: '';
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 12px;
-        height: 12px;
-        background: #ff4757;
-        border-radius: 50%;
-        border: 2px solid white;
-        animation: pulse-dot 2s infinite;
-    }
-    @keyframes pulse-dot {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.2); opacity: 0.8; }
-    }
-
-    /* Chat Popup */
-    .chat-popup {
-        position: fixed;
-        bottom: 100px;
-        right: 30px;
-        width: 400px;
-        height: 550px;
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-        display: none;
-        flex-direction: column;
-        z-index: 1000;
-        overflow: hidden;
-    }
-    .chat-popup.active {
-        display: flex;
-        animation: slideUp 0.3s ease;
-    }
-    @keyframes slideUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Dashboard - Parallel Transfer Server</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
-        to {
-            opacity: 1;
-            transform: translateY(0);
+
+        body {
+            font-family: 'Poppins', Arial, sans-serif;
+            min-height: 100vh;
+            background-color: #121212;
+            color: #333;
+            padding: 20px;
         }
-    }
 
-    .chat-popup-header {
-        background: #000;
-        color: white;
-        padding: 15px 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .chat-popup-header h3 {
-        font-size: 1.1rem;
-        margin: 0;
-        color: white;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .username-display {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: rgba(255, 255, 255, 0.15);
-        padding: 6px 12px;
-        border-radius: 15px;
-        font-size: 0.85rem;
-    }
-    .edit-username-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 10px;
-        cursor: pointer;
-        font-size: 0.75rem;
-        font-family: inherit;
-        transition: background 0.2s;
-    }
-    .edit-username-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-    .online-indicator {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.8rem;
-        color: rgba(255, 255, 255, 0.8);
-    }
-    .online-dot {
-        width: 8px;
-        height: 8px;
-        background: #2ecc71;
-        border-radius: 50%;
-        animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    .close-chat-btn {
-        background: transparent;
-        border: none;
-        color: white;
-        font-size: 24px;
-        cursor: pointer;
-        padding: 0;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 4px;
-        transition: background 0.2s;
-    }
-    .close-chat-btn:hover {
-        background: rgba(255, 255, 255, 0.1);
-    }
-
-    .chat-messages-popup {
-        flex: 1;
-        overflow-y: auto;
-        padding: 15px;
-        background: #f7f7f7;
-    }
-    .chat-messages-popup::-webkit-scrollbar {
-        width: 6px;
-    }
-    .chat-messages-popup::-webkit-scrollbar-track {
-        background: #e0e0e0;
-    }
-    .chat-messages-popup::-webkit-scrollbar-thumb {
-        background: #999;
-        border-radius: 3px;
-    }
-
-    .chat-message {
-        margin-bottom: 12px;
-        animation: slideIn 0.3s ease;
-    }
-    @keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateY(10px);
+        h2,
+        h3 {
+            font-weight: 600;
+            color: #000;
         }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    .message-header {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-bottom: 4px;
-    }
-    .message-username {
-        font-weight: 600;
-        color: #000;
-        font-size: 0.85rem;
-    }
-    .message-time {
-        font-size: 0.7rem;
-        color: #999;
-    }
-    .message-content {
-        background: white;
-        padding: 10px 12px;
-        border-radius: 10px;
-        word-wrap: break-word;
-        max-width: 85%;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
-        font-size: 0.9rem;
-        line-height: 1.4;
-    }
-    .message-system {
-        text-align: center;
-        color: #999;
-        font-size: 0.75rem;
-        font-style: italic;
-        padding: 6px 0;
-    }
 
-    .chat-input-popup {
-        padding: 12px 15px;
-        background: white;
-        border-top: 1px solid #e0e0e0;
-        display: flex;
-        gap: 8px;
-    }
-    .chat-input-popup input {
-        flex: 1;
-        padding: 10px 12px;
-        border: 1px solid #ccc;
-        border-radius: 20px;
-        font-size: 0.9rem;
-        font-family: 'Poppins', sans-serif;
-    }
-    .chat-input-popup input:focus {
-        outline: none;
-        border-color: #000;
-    }
-    .chat-input-popup button {
-        background: #000;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 20px;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 0.9rem;
-        font-family: 'Poppins', sans-serif;
-        transition: background 0.2s;
-    }
-    .chat-input-popup button:hover {
-        background: #333;
-    }
-    .chat-input-popup button:disabled {
-        background: #999;
-        cursor: not-allowed;
-    }
-
-    .empty-chat-popup {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        color: #999;
-        font-size: 0.9rem;
-    }
-
-    /* Username Setup */
-    .username-setup {
-        display: none;
-        padding: 20px;
-        background: white;
-        text-align: center;
-    }
-    .username-setup.active {
-        display: block;
-    }
-    .username-setup h4 {
-        color: #000;
-        margin-bottom: 15px;
-        font-size: 1rem;
-    }
-    .username-setup input {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        font-size: 0.95rem;
-        font-family: 'Poppins', sans-serif;
-        margin-bottom: 12px;
-    }
-    .username-setup input:focus {
-        outline: none;
-        border-color: #000;
-    }
-    .username-setup button {
-        width: 100%;
-        padding: 12px;
-        background: #000;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 0.95rem;
-        font-weight: 600;
-        cursor: pointer;
-        font-family: 'Poppins', sans-serif;
-    }
-    .username-setup button:hover {
-        background: #333;
-    }
-    .username-setup p {
-        font-size: 0.85rem;
-        color: #666;
-        margin-bottom: 15px;
-    }
-
-    /* Username Edit Modal */
-    .username-modal {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 10000;
-        align-items: center;
-        justify-content: center;
-    }
-    .username-modal.active {
-        display: flex;
-    }
-    .username-modal-content {
-        background: white;
-        padding: 25px;
-        border-radius: 12px;
-        max-width: 350px;
-        width: 90%;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    }
-    .username-modal-content h4 {
-        margin-bottom: 15px;
-        color: #000;
-        font-size: 1.1rem;
-    }
-    .username-modal-content input {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        font-size: 0.95rem;
-        font-family: 'Poppins', sans-serif;
-        margin-bottom: 15px;
-    }
-    .username-modal-content input:focus {
-        outline: none;
-        border-color: #000;
-    }
-    .username-modal-buttons {
-        display: flex;
-        gap: 10px;
-    }
-    .username-modal-buttons button {
-        flex: 1;
-        padding: 10px;
-        border: none;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        font-weight: 600;
-        cursor: pointer;
-        font-family: 'Poppins', sans-serif;
-        transition: background 0.2s;
-    }
-    .username-modal-save {
-        background: #000;
-        color: white;
-    }
-    .username-modal-save:hover {
-        background: #333;
-    }
-    .username-modal-cancel {
-        background: #e0e0e0;
-        color: #333;
-    }
-    .username-modal-cancel:hover {
-        background: #d0d0d0;
-    }
-    
-    @media (max-width: 1024px) {
         .dashboard-container {
-            grid-template-columns: 1fr;
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 30px;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         }
+
         .qr-panel {
+            padding: 10px;
+            border-right: 1px solid #eee;
+        }
+
+        .qr-panel h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .step-box {
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .step-box h3 {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+        }
+
+        .step-box img {
+            width: 100%;
+            max-width: 200px;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .step-box p {
+            font-size: 1rem;
+            color: #555;
+        }
+
+        .logout-section {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .logout-link {
+            color: #888;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+            font-size: 1.1rem;
+        }
+
+        .logout-link:hover {
+            color: #d93025;
+        }
+
+        .files-panel {
+            padding: 10px;
+        }
+
+        .copy-url-section {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .copy-url-section p {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .copy-input-wrapper {
+            display: flex;
+            width: 100%;
+        }
+
+        .copy-input-wrapper input[type="text"] {
+            flex-grow: 1;
+            padding: 10px 15px;
+            font-family: 'Poppins', monospace;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 8px 0 0 8px;
+            background-color: #f7f7f7;
+            color: #333;
             border-right: none;
+            outline: none;
+        }
+
+        .copy-input-wrapper button {
+            padding: 10px 20px;
+            border: 1px solid #000;
+            border-radius: 0 8px 8px 0;
+            background: #000;
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .copy-input-wrapper button:hover {
+            background: #333;
+        }
+
+        .copy-input-wrapper button:active {
+            transform: scale(0.98);
+        }
+
+        .files-panel h2 {
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .upload-form {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
             border-bottom: 1px solid #eee;
-            padding-bottom: 30px;
         }
-        .chat-popup {
-            right: 20px;
-            width: calc(100vw - 40px);
-            max-width: 400px;
+
+        .file-input-wrapper {
+            position: relative;
+            margin-bottom: 20px;
         }
-    }
-    @media (max-width: 480px) {
-        body { padding: 10px; }
-        .dashboard-container { padding: 20px 15px; }
-        .qr-panel h2, .files-panel h2 { font-size: 1.8rem; }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            width: 0.1px;
+            height: 0.1px;
+            opacity: 0;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .file-input-label {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 120px;
+            padding: 20px;
+            background-color: #f7f7f7;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .file-input-label:hover {
+            background-color: #f0f0f0;
+            border-color: #999;
+        }
+
+        .file-input-label span {
+            font-size: 1rem;
+        }
+
+        #file-name-display {
+            font-size: 0.9rem;
+            margin-top: 8px;
+            color: #007BFF;
+            font-weight: 600;
+        }
+
+        .upload-button {
+            width: 100%;
+            max-width: 250px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #000;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        .upload-button:hover {
+            background: #333;
+        }
+
+        .upload-button:active {
+            transform: scale(0.98);
+        }
+
+        .delete-btn {
+            padding: 6px 12px;
+            background: #ff3b3b;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .delete-btn:hover {
+            background: #cc0000;
+            transform: translateY(-1px);
+        }
+
+        .progress-container {
+            display: none;
+            margin-top: 15px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 40px;
+            background-color: #f0f0f0;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #ccc;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #000000 0%, #333333 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .speed-display {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .files-header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .files-header {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .refresh-btn {
+            padding: 6px 16px;
+            border: 1px solid #000;
+            background: white;
+            color: #000;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .refresh-btn:hover {
+            background: #f0f0f0;
+            transform: translateY(-1px);
+        }
+
+        .users-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .users-dropdown-btn {
+            padding: 6px 16px;
+            border: 1px solid #000;
+            background: white;
+            color: #000;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .users-dropdown-btn:hover {
+            background: #f0f0f0;
+            transform: translateY(-1px);
+        }
+
+        .users-dropdown-btn svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+            transition: transform 0.2s ease;
+        }
+
+        .users-dropdown-btn.active svg {
+            transform: rotate(180deg);
+        }
+
+        .users-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 5px;
+            background: white;
+            border: 1px solid #000;
+            border-radius: 6px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            min-width: 200px;
+            max-width: 300px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .users-dropdown-menu.active {
+            display: block;
+            animation: slideDown 0.2s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .users-dropdown-header {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #333;
+            background: #f7f7f7;
+        }
+
+        .users-list {
+            list-style: none;
+            padding: 5px 0;
+            margin: 0;
+        }
+
+        .user-item {
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: default;
+            transition: background-color 0.2s ease;
+        }
+
+        .user-item:hover {
+            background: #f7f7f7;
+        }
+
+        .user-item.server {
+            background: rgba(0, 123, 255, 0.05);
+        }
+
+        .user-item.server:hover {
+            background: rgba(0, 123, 255, 0.1);
+        }
+
+        .user-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2ecc71;
+            flex-shrink: 0;
+            animation: pulse 2s infinite;
+        }
+
+        .user-name {
+            flex: 1;
+            font-size: 0.85rem;
+            color: #333;
+            word-break: break-word;
+        }
+
+        .user-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #007BFF;
+            color: white;
+            font-weight: 500;
+        }
+
+        .no-users {
+            padding: 12px;
+            text-align: center;
+            color: #999;
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+
+        .file-list {
+            list-style: none;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-radius: 8px;
+            transition: background-color 0.3s ease;
+        }
+
+        .file-item:not(:last-child) {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .file-item:hover {
+            background-color: #f9f9f9;
+        }
+
+        .file-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .file-name {
+            flex: 1;
+            color: #333;
+            font-weight: 500;
+            word-break: break-all;
+        }
+
+        .file-item a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: 500;
+            word-break: break-all;
+        }
+
+        .file-item a:hover {
+            text-decoration: underline;
+        }
+
+        .download-link {
+            padding: 8px 16px;
+            background: #414141;
+            color: white !important;
+            border-radius: 6px;
+            text-decoration: none !important;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+
+        .download-link:hover {
+            background: #000000;
+            transform: translateY(-1px);
+        }
+
+        .download-link.disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .download-link.username-required {
+            position: relative;
+        }
+
+        .download-link.username-required::after {
+            content: '⚠️';
+            margin-left: 5px;
+            font-size: 0.8em;
+        }
+
+        .assembling-badge {
+            padding: 6px 12px;
+            background: #8b8b8b;
+            color: #000;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            animation: pulse-badge 1.5s infinite;
+        }
+
+        .kick-btn {
+            padding: 4px 10px;
+            background: #ff3b3b;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .kick-btn:hover {
+            background: #cc0000;
+        }
+
+        @keyframes pulse-badge {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .info-btn {
+            padding: 6px 12px;
+            background: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-left: 8px;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .info-btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        .info-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: white;
+        }
+
+        .file-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .uploader-info {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .upload-username-display {
+            font-size: 0.9rem;
+            color: #007BFF;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+
+        /* File Info Modal */
+        .file-info-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10001;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .file-info-modal.active {
+            display: flex;
+        }
+
+        .file-info-modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .file-info-modal-content h3 {
+            margin-bottom: 20px;
+            color: #000;
+            font-size: 1.4rem;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .file-info-item {
+            margin-bottom: 15px;
+        }
+
+        .file-info-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        .file-info-value {
+            color: #666;
+            font-size: 0.95rem;
+        }
+
+        .download-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+
+        .download-list-item {
+            padding: 8px 12px;
+            background: #f7f7f7;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+        }
+
+        .download-list-item strong {
+            color: #007BFF;
+        }
+
+        .close-modal-btn {
+            background: #000;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-top: 20px;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .close-modal-btn:hover {
+            background: #333;
+        }
+
+        .info-btn {
+            padding: 6px 12px;
+            background: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-left: 8px;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .info-btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        .info-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: white;
+        }
+
+        .file-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .uploader-info {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        /* Chat Button */
         .chat-float-btn {
-            bottom: 20px;
-            right: 20px;
-            width: 55px;
-            height: 55px;
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #000000 0%, #333333 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: all 0.3s ease;
+            z-index: 999;
+            overflow: hidden;
         }
+
+        .chat-float-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .chat-float-btn svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
+        }
+
+        .chat-float-btn img {
+            width: 36px;
+            height: 36px;
+            object-fit: cover;
+        }
+
+        .chat-float-btn.has-messages::after {
+            content: '';
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 12px;
+            height: 12px;
+            background: #ff4757;
+            border-radius: 50%;
+            border: 2px solid white;
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.8;
+            }
+        }
+
+        /* Chat Popup */
         .chat-popup {
-            bottom: 85px;
-            right: 20px;
-            left: 20px;
-            width: auto;
-            height: 500px;
+            position: fixed;
+            bottom: 100px;
+            right: 30px;
+            width: 400px;
+            height: 550px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            display: none;
+            flex-direction: column;
+            z-index: 1000;
+            overflow: hidden;
         }
-    }
-</style>
+
+        .chat-popup.active {
+            display: flex;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .chat-popup-header {
+            background: #000;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-popup-header h3 {
+            font-size: 1.1rem;
+            margin: 0;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .username-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+        }
+
+        .edit-username-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+
+        .edit-username-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .online-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .online-dot {
+            width: 8px;
+            height: 8px;
+            background: #2ecc71;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .close-chat-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .close-chat-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .chat-messages-popup {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: #f7f7f7;
+        }
+
+        .chat-messages-popup::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages-popup::-webkit-scrollbar-track {
+            background: #e0e0e0;
+        }
+
+        .chat-messages-popup::-webkit-scrollbar-thumb {
+            background: #999;
+            border-radius: 3px;
+        }
+
+        .chat-message {
+            margin-bottom: 12px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .message-username {
+            font-weight: 600;
+            color: #000;
+            font-size: 0.85rem;
+        }
+
+        .message-time {
+            font-size: 0.7rem;
+            color: #999;
+        }
+
+        .message-content {
+            background: white;
+            padding: 10px 12px;
+            border-radius: 10px;
+            word-wrap: break-word;
+            max-width: 85%;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .message-system {
+            text-align: center;
+            color: #999;
+            font-size: 0.75rem;
+            font-style: italic;
+            padding: 6px 0;
+        }
+
+        .chat-input-popup {
+            padding: 12px 15px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input-popup input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .chat-input-popup input:focus {
+            outline: none;
+            border-color: #000;
+        }
+
+        .chat-input-popup button {
+            background: #000;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            font-family: 'Poppins', sans-serif;
+            transition: background 0.2s;
+        }
+
+        .chat-input-popup button:hover {
+            background: #333;
+        }
+
+        .chat-input-popup button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        .empty-chat-popup {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        /* Username Setup */
+        .username-setup {
+            display: none;
+            padding: 20px;
+            background: white;
+            text-align: center;
+        }
+
+        .username-setup.active {
+            display: block;
+        }
+
+        .username-setup h4 {
+            color: #000;
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+
+        .username-setup input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-family: 'Poppins', sans-serif;
+            margin-bottom: 12px;
+        }
+
+        .username-setup input:focus {
+            outline: none;
+            border-color: #000;
+        }
+
+        .username-setup button {
+            width: 100%;
+            padding: 12px;
+            background: #000;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .username-setup button:hover {
+            background: #333;
+        }
+
+        .username-setup p {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        /* Username Edit Modal */
+        .username-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .username-modal.active {
+            display: flex;
+        }
+
+        .username-modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            max-width: 350px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .username-modal-content h4 {
+            margin-bottom: 15px;
+            color: #000;
+            font-size: 1.1rem;
+        }
+
+        .username-modal-content input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-family: 'Poppins', sans-serif;
+            margin-bottom: 15px;
+        }
+
+        .username-modal-content input:focus {
+            outline: none;
+            border-color: #000;
+        }
+
+        .username-modal-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .username-modal-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            transition: background 0.2s;
+        }
+
+        .username-modal-save {
+            background: #000;
+            color: white;
+        }
+
+        .username-modal-save:hover {
+            background: #333;
+        }
+
+        .username-modal-cancel {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .username-modal-cancel:hover {
+            background: #d0d0d0;
+        }
+
+        /* Username Required Modal */
+        .username-required-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10002;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .username-required-modal.active {
+            display: flex;
+        }
+
+        .username-required-content {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            max-width: 450px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .username-required-content h3 {
+            margin-bottom: 15px;
+            color: #000;
+            font-size: 1.5rem;
+        }
+
+        .username-required-content p {
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .username-required-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: 'Poppins', sans-serif;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .username-required-input:focus {
+            outline: none;
+            border-color: #007BFF;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
+        .username-required-btn {
+            width: 100%;
+            padding: 15px;
+            background: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            transition: background 0.2s;
+        }
+
+        .username-required-btn:hover {
+            background: #0056b3;
+        }
+
+        .username-required-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+
+            .qr-panel {
+                border-right: none;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 30px;
+            }
+
+            .chat-popup {
+                right: 20px;
+                width: calc(100vw - 40px);
+                max-width: 400px;
+            }
+
+            .files-header-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .header-actions {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .refresh-btn,
+            .users-dropdown-btn {
+                flex: 1;
+                justify-content: center;
+            }
+
+            .users-dropdown-menu {
+                right: auto;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .dashboard-container {
+                padding: 20px 15px;
+            }
+
+            .qr-panel h2,
+            .files-panel h2 {
+                font-size: 1.8rem;
+            }
+
+            .chat-float-btn {
+                bottom: 20px;
+                right: 20px;
+                width: 55px;
+                height: 55px;
+            }
+
+            .chat-popup {
+                bottom: 85px;
+                right: 20px;
+                left: 20px;
+                width: auto;
+                height: 500px;
+            }
+        }
+    </style>
 </head>
-<body>
 
-<div class="dashboard-container">
-    
-    <div class="qr-panel">
-        <h2>Connect Device</h2>
-        
-        <div class="step-box">
-            <h3>Step 1: Connect to Hotspot</h3>
-            <img src="{{ wifi_qr }}" alt="Wi-Fi QR Code">
-            <p>Scan this with your phone's camera to join the Wi-Fi hotspot.</p>
-        </div>
-        
-        <div class="step-box">
-            <h3>Step 2: Open File Server</h3>
-            <img src="{{ url_qr }}" alt="URL QR Code">
-            <p>After connecting, scan this to open the file page in your browser.</p>
-        </div>
-        
-        <div class="logout-section">
-            <a href="/logout" class="logout-link">Logout from this PC</a>
-        </div>
-    </div>
-    
-    <div class="files-panel">
-        
-        <div class="copy-url-section">
-            <p>Or, share this URL with connected devices:</p>
-            <div class="copy-input-wrapper">
-                <input type="text" value="{{ url_string_for_copy }}" id="urlToCopy" readonly>
-                <button onclick="copyUrl()" id="copyButton">Copy</button>
+<body data-username-set="{% if username_set %}true{% else %}false{% endif %}" data-username="{{ username }}">
+
+    <div class="dashboard-container">
+
+        <div class="qr-panel">
+            <h2>Connect Device</h2>
+
+            <div class="step-box">
+                <h3>Step 1: Connect to Hotspot</h3>
+                <img src="{{ wifi_qr }}" alt="Wi-Fi QR Code">
+                <p>Scan this with your phone's camera to join the Wi-Fi hotspot.</p>
+            </div>
+
+            <div class="step-box">
+                <h3>Step 2: Open File Server</h3>
+                <img src="{{ url_qr }}" alt="URL QR Code">
+                <p>After connecting, scan this to open the file page in your browser.</p>
+            </div>
+
+            <div class="logout-section">
+                <a href="/logout" class="logout-link">Logout from this PC</a>
             </div>
         </div>
-        
-        <h2>File Management</h2>
 
-        <form class="upload-form" id="uploadForm" action="/upload_parallel" method="post" enctype="multipart/form-data">
-            <div class="file-input-wrapper">
-                <input type="file" name="file" id="file-input" required>
-                <label for="file-input" class="file-input-label">
-                    <span>Click to select a file</span>
-                    <span id="file-name-display"></span>
-                </label>
-            </div>
-            <input type="submit" value="Upload File" class="upload-button">
-            <div class="progress-container" id="progressContainer">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill">0%</div>
+        <div class="files-panel">
+
+            <div class="copy-url-section">
+                <p>Or, share this URL with connected devices:</p>
+                <div class="copy-input-wrapper">
+                    <input type="text" value="{{ url_string_for_copy }}" id="urlToCopy" readonly>
+                    <button onclick="copyUrl()" id="copyButton">Copy</button>
                 </div>
-                <div class="speed-display" id="speedDisplay"></div>
             </div>
-        </form>
 
-        <div class="files-header-container">
-            <h3 class="files-header">Uploaded Files</h3>
-            <button onclick="window.location.reload()" class="refresh-btn">
-                Refresh ↻
-            </button>
-        </div>
+            <h2>File Management</h2>
 
-        <ul class="file-list">
-            {% for filename in files %}
-            <li class="file-item" data-filename="{{ filename }}">
-                <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" /></svg>
-                <span class="file-name">{{ filename }}</span>
-                <a href="/download_parallel/{{ filename }}" class="download-link" data-filename="{{ filename }}">Download</a>
-                <span class="assembling-badge" style="display: none;">⏳ Assembling...</span>
-            </li>
-            {% else %}
-            <li class="file-item" style="color: #888;">No files uploaded yet.</li>
-            {% endfor %}
-        </ul>
-        
-    </div>
-</div>
+            <form class="upload-form" id="uploadForm" action="/upload_parallel" method="post"
+                enctype="multipart/form-data">
+                <div class="file-input-wrapper">
+                    <input type="file" name="file" id="file-input" required>
+                    <label for="file-input" class="file-input-label">
+                        <span>Click to select a file</span>
+                        <span id="file-name-display"></span>
+                    </label>
+                </div>
+                <div class="upload-username-display" id="uploadUsernameDisplay" style="display: none;">
+                    Uploading as: <strong>{{ username }}</strong>
+                </div>
+                <input type="submit" value="Upload File" class="upload-button">
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill">0%</div>
+                    </div>
+                    <div class="speed-display" id="speedDisplay"></div>
+                </div>
+            </form>
 
-<!-- Chat Float Button -->
-<button class="chat-float-btn" id="chatFloatBtn" onclick="toggleChat()">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
-    </svg> 
-</button>
+            <div class="files-header-container">
+                <h3 class="files-header">Uploaded Files</h3>
 
-<!-- Chat Popup -->
-<div class="chat-popup" id="chatPopup">
-    <div class="chat-popup-header">
-        <h3>Live Chat</h3>
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="username-display" id="usernameDisplayHeader" style="display: none;">
-                <span id="currentUsernameText"></span>
-                <button class="edit-username-btn" onclick="openEditUsernameModal()">✏️ Edit</button>
+                <div class="header-actions">
+
+                    <div class="header-actions">
+                        <div class="users-dropdown">
+                            <button id="usersDropdownBtn" class="users-dropdown-btn" title="Online Users">
+                                <span>User</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="usersDropdownMenu" class="users-dropdown-menu">
+                                <div class="users-dropdown-header">Online Users</div>
+                                <ul class="users-list" id="usersList">
+                                    <li class="no-users">Loading...</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <button onclick="window.location.reload()" class="refresh-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2" width="20" height="20"
+                                style="vertical-align: middle;">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <input type="text" id="searchInput" placeholder="Search files..."
+                        style="padding:6px 10px; border-radius:6px; border:1px solid #ccc; font-size:0.9rem;">
+
+                    <select id="sortSelect"
+                        style="padding:6px 10px; border-radius:6px; border:1px solid #ccc; font-size:0.9rem;">
+                        <option value="name">Sort: Name</option>
+                        <option value="size">Sort: Size</option>
+                        <option value="date">Sort: Date</option>
+                    </select>
+
+                    <select id="filterSelect"
+                        style="padding:6px 10px; border-radius:6px; border:1px solid #ccc; font-size:0.9rem;">
+                        <option value="all">All Files</option>
+                        <option value="large">Large (>50MB)</option>
+                        <option value="small">Small (&lt;50MB)</option>
+                    </select>
+                </div>
+
+                <ul class="file-list">
+                    {% for filename in files %}
+                    <li class="file-item" data-filename="{{ filename }}"
+                        data-size="{{ files_metadata[filename]['file_size'] // (1024*1024) }}"
+                        data-time="{{ files_metadata[filename]['upload_time'].replace(' ', 'T') }}">
+                        <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                            fill="currentColor">
+                            <path
+                                d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                        </svg>
+                        <span class="file-name">{{ filename }}</span>
+                        <div class="file-actions">
+                            <button class="info-btn" onclick="showFileInfo('{{ filename }}')">Info</button>
+
+                            {% if session.get('role') == 'server' %}
+                            <button class="delete-btn" onclick="deleteFile('{{ filename }}')">Delete</button>
+                            {% endif %}
+
+                            <a href="/download_parallel/{{ filename }}" class="download-link">Download</a>
+                        </div>
+
+                        <span class="assembling-badge" style="display: none;">⏳ Assembling...</span>
+                    </li>
+                    {% else %}
+                    <li class="file-item" style="color: #888;">No files uploaded yet.</li>
+                    {% endfor %}
+                </ul>
+
             </div>
-            <span class="online-indicator">
-                <span class="online-dot"></span>
-                <span>Online</span>
-            </span>
-            <button class="close-chat-btn" onclick="toggleChat()">×</button>
         </div>
-    </div>
-    
-    <div class="chat-messages-popup" id="chatMessagesPopup">
-        <div class="username-setup active" id="usernameSetup">
-            <h4>👋 Welcome to Chat!</h4>
-            <p>Please enter your name before chatting</p>
-            <input type="text" id="usernameSetupInput" placeholder="Enter your name..." maxlength="20">
-            <button onclick="setupUsername()">Continue to Chat</button>
+
+        <!-- Chat Float Button -->
+        <button class="chat-float-btn" id="chatFloatBtn" onclick="toggleChat()">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
+            </svg>
+        </button>
+
+        <!-- Chat Popup -->
+        <div class="chat-popup" id="chatPopup">
+            <div class="chat-popup-header">
+                <h3>Live Chat</h3>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="username-display" id="usernameDisplayHeader" style="display: none;">
+                        <span id="currentUsernameText"></span>
+                        <button class="edit-username-btn" onclick="openEditUsernameModal()">✏️ Edit</button>
+                    </div>
+                    <span class="online-indicator">
+                        <span class="online-dot"></span>
+                        <span>Online</span>
+                    </span>
+                    <button class="close-chat-btn" onclick="toggleChat()">×</button>
+                </div>
+            </div>
+
+            <div class="chat-messages-popup" id="chatMessagesPopup">
+                <div class="empty-chat-popup" id="emptyChatPopup">
+                    <p>No messages yet</p>
+                </div>
+            </div>
+
+            <div class="chat-input-popup">
+                <input type="text" id="chatInputPopup" placeholder="Type a message..."
+                    onkeypress="handleChatKeypressPopup(event)" maxlength="500">
+                <button id="sendBtnPopup" onclick="sendMessagePopup()">Send</button>
+            </div>
         </div>
-        <div class="empty-chat-popup" id="emptyChatPopup">
-            <p>No messages yet</p>
+
+        <!-- Username Edit Modal -->
+        <div class="username-modal" id="usernameModal">
+            <div class="username-modal-content">
+                <h4>Edit Username</h4>
+                <input type="text" id="editUsernameInput" placeholder="Enter your name..." maxlength="20">
+                <div class="username-modal-buttons">
+                    <button class="username-modal-cancel" onclick="closeEditUsernameModal()">Cancel</button>
+                    <button class="username-modal-save" onclick="saveEditedUsername()">Save</button>
+                </div>
+            </div>
         </div>
-    </div>
-    
-    <div class="chat-input-popup">
-        <input type="text" id="chatInputPopup" placeholder="Type a message..." onkeypress="handleChatKeypressPopup(event)" maxlength="500">
-        <button id="sendBtnPopup" onclick="sendMessagePopup()">Send</button>
-    </div>
-</div>
 
-<!-- Username Edit Modal -->
-<div class="username-modal" id="usernameModal">
-    <div class="username-modal-content">
-        <h4>Edit Username</h4>
-        <input type="text" id="editUsernameInput" placeholder="Enter your name..." maxlength="20">
-        <div class="username-modal-buttons">
-            <button class="username-modal-cancel" onclick="closeEditUsernameModal()">Cancel</button>
-            <button class="username-modal-save" onclick="saveEditedUsername()">Save</button>
+        <!-- File Info Modal -->
+        <div class="file-info-modal" id="fileInfoModal" onclick="if(event.target===this) closeFileInfoModal()">
+            <div class="file-info-modal-content">
+                <h3 id="fileInfoTitle">File Information</h3>
+                <div id="fileInfoContent">
+                    <div class="file-info-item">
+                        <div class="file-info-label">Loading...</div>
+                    </div>
+                </div>
+                <button class="close-modal-btn" onclick="closeFileInfoModal()">Close</button>
+            </div>
         </div>
-    </div>
-</div>
 
-<script>
-function copyUrl() {
-    var copyText = document.getElementById("urlToCopy");
-    var copyButton = document.getElementById("copyButton");
-    
-    copyText.select();
-    copyText.setSelectionRange(0, 99999);
+        <!-- Username Required Modal -->
+        <div class="username-required-modal" id="usernameRequiredModal">
+            <div class="username-required-content">
+                <h3>👋 Welcome!</h3>
+                <p>Please enter your name to continue. This name will be used to track your file uploads and downloads.
+                </p>
+                <input type="text" class="username-required-input" id="usernameRequiredInput"
+                    placeholder="Enter your name..." maxlength="20" autofocus>
+                <button class="username-required-btn" id="usernameRequiredBtn"
+                    onclick="setRequiredUsername()">Continue</button>
+            </div>
+        </div>
 
-    try {
-        var successful = document.execCommand('copy');
-        if (successful) {
-            copyButton.textContent = "Copied!";
-        } else {
-            copyButton.textContent = "Failed";
-        }
-    } catch (err) {
-        console.error('Could not copy text: ', err);
-        copyButton.textContent = "Error";
-    }
-    
-    setTimeout(function() {
-        copyButton.textContent = "Copy";
-    }, 2000);
-}
+        <script>
+            function copyUrl() {
+                var copyText = document.getElementById("urlToCopy");
+                var copyButton = document.getElementById("copyButton");
 
-const fileInput = document.getElementById('file-input');
-const fileNameDisplay = document.getElementById('file-name-display');
+                copyText.select();
+                copyText.setSelectionRange(0, 99999);
 
-fileInput.addEventListener('change', function() {
-    if (this.files.length > 0) {
-        fileNameDisplay.textContent = `Selected: ${this.files[0].name}`;
-    } else {
-        fileNameDisplay.textContent = '';
-    }
-});
-
-// Parallel upload
-document.getElementById('uploadForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const file = fileInput.files[0];
-    if (!file) return;
-    
-    const progressContainer = document.getElementById('progressContainer');
-    const progressFill = document.getElementById('progressFill');
-    const speedDisplay = document.getElementById('speedDisplay');
-    
-    progressContainer.style.display = 'block';
-    
-    const chunkSize = 1 * 1024 * 1024; // 1MB chunks (better for large files)
-    const numStreams = 4;
-    const totalChunks = Math.ceil(file.size / chunkSize);
-    let completedChunks = 0;
-    let startTime = Date.now();
-    let uploadedBytes = 0;
-    
-    const chunksPerStream = Math.ceil(totalChunks / numStreams);
-    const streams = [];
-    
-    for (let streamId = 0; streamId < numStreams; streamId++) {
-        const startChunk = streamId * chunksPerStream;
-        const endChunk = Math.min(startChunk + chunksPerStream, totalChunks);
-        
-        if (startChunk < totalChunks) {
-            streams.push({streamId, startChunk, endChunk});
-        }
-    }
-    
-    let activeStreams = streams.length;
-    
-    streams.forEach(stream => {
-        uploadStream(file, stream, chunkSize, function(progress, bytes) {
-            completedChunks += progress;
-            uploadedBytes += bytes;
-            
-            const percent = (completedChunks / totalChunks) * 100;
-            const elapsed = (Date.now() - startTime) / 1000;
-            const speed = uploadedBytes / elapsed / (1024 * 1024);
-            
-            progressFill.style.width = percent + '%';
-            progressFill.textContent = Math.round(percent) + '%';
-            speedDisplay.textContent = `Speed: ${speed.toFixed(2)} MB/s`;
-        }, function() {
-            activeStreams--;
-            if (activeStreams === 0) {
-                progressFill.textContent = 'Complete!';
-                setTimeout(() => window.location.reload(), 500);
-            }
-        });
-    });
-});
-
-function uploadStream(file, stream, chunkSize, onProgress, onComplete) {
-    const {streamId, startChunk, endChunk} = stream;
-    let currentChunk = startChunk;
-    let retryCount = 0;
-    const MAX_RETRIES = 5;
-    
-    function uploadNextChunk() {
-        if (currentChunk >= endChunk) {
-            console.log(`Stream ${streamId} completed`);
-            onComplete();
-            return;
-        }
-        
-        const start = currentChunk * chunkSize;
-        const end = Math.min(start + chunkSize, file.size);
-        const chunk = file.slice(start, end);
-        
-        const formData = new FormData();
-        formData.append('chunk', chunk);
-        formData.append('chunkIndex', currentChunk);
-        formData.append('totalChunks', Math.ceil(file.size / chunkSize));
-        formData.append('filename', file.name);
-        formData.append('streamId', streamId);
-        
-        console.log(`Stream ${streamId}: Uploading chunk ${currentChunk} (${chunk.size} bytes)`);
-        
-        fetch('/upload_chunk', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                console.log(`Stream ${streamId}: Chunk ${currentChunk} uploaded successfully`);
-                onProgress(1, chunk.size);
-                currentChunk++;
-                retryCount = 0; // Reset retry count on success
-                uploadNextChunk();
-            } else {
-                throw new Error(data.error || 'Upload failed');
-            }
-        })
-        .catch(err => {
-            console.error(`Stream ${streamId} chunk ${currentChunk} error:`, err);
-            retryCount++;
-            
-            if (retryCount < MAX_RETRIES) {
-                console.log(`Stream ${streamId}: Retrying chunk ${currentChunk} (attempt ${retryCount}/${MAX_RETRIES})`);
-                setTimeout(uploadNextChunk, 1000 * retryCount); // Exponential backoff
-            } else {
-                console.error(`Stream ${streamId}: Failed after ${MAX_RETRIES} retries`);
-                alert(`Upload failed for chunk ${currentChunk}. Please try again.`);
-            }
-        });
-    }
-    
-    uploadNextChunk();
-}
-
-// Monitor file assembly status
-function checkFileStatus() {
-    fetch('/file_status')
-        .then(response => response.json())
-        .then(data => {
-            const assemblingFiles = data.assembling || [];
-            
-            // Update UI for all files
-            document.querySelectorAll('.file-item').forEach(item => {
-                const filename = item.dataset.filename;
-                if (!filename) return;
-                
-                const downloadLink = item.querySelector('.download-link');
-                const assemblingBadge = item.querySelector('.assembling-badge');
-                
-                if (assemblingFiles.includes(filename)) {
-                    // File is being assembled
-                    if (downloadLink) {
-                        downloadLink.classList.add('disabled');
-                        downloadLink.style.display = 'none';
+                try {
+                    var successful = document.execCommand('copy');
+                    if (successful) {
+                        copyButton.textContent = "Copied!";
+                    } else {
+                        copyButton.textContent = "Failed";
                     }
-                    if (assemblingBadge) {
-                        assemblingBadge.style.display = 'inline-block';
+                } catch (err) {
+                    console.error('Could not copy text: ', err);
+                    copyButton.textContent = "Error";
+                }
+
+                setTimeout(function () {
+                    copyButton.textContent = "Copy";
+                }, 2000);
+            }
+
+            const fileInput = document.getElementById('file-input');
+            const fileNameDisplay = document.getElementById('file-name-display');
+            const uploadUsernameDisplay = document.getElementById('uploadUsernameDisplay');
+            const usernameRequiredModal = document.getElementById('usernameRequiredModal');
+            const usernameRequiredInput = document.getElementById('usernameRequiredInput');
+            const usernameRequiredBtn = document.getElementById('usernameRequiredBtn');
+
+            // Check if username is set on page load - get from data attribute
+            var usernameSet = document.body.getAttribute('data-username-set') === 'true';
+            var currentUsernameValue = document.body.getAttribute('data-username') || '';
+
+            if (!usernameSet) {
+                // Show username required modal
+                if (usernameRequiredModal) {
+                    usernameRequiredModal.classList.add('active');
+                    if (usernameRequiredInput) usernameRequiredInput.focus();
+                }
+
+                // Disable file operations until username is set
+                if (fileInput) fileInput.disabled = true;
+                const uploadBtn = document.querySelector('.upload-button');
+                if (uploadBtn) uploadBtn.disabled = true;
+
+                // Mark download links as requiring username
+                document.querySelectorAll('.download-link').forEach(link => {
+                    link.classList.add('username-required');
+                });
+            }
+
+            // Handle Enter key in username required input
+            if (usernameRequiredInput) {
+                usernameRequiredInput.addEventListener('keypress', function (event) {
+                    if (event.key === 'Enter') {
+                        setRequiredUsername();
                     }
-                } else {
-                    // File is ready
-                    if (downloadLink) {
-                        downloadLink.classList.remove('disabled');
-                        downloadLink.style.display = 'inline-block';
+                });
+            }
+
+            // Ensure download check runs after DOM is fully loaded
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    // Download check is already set up with event delegation above
+                });
+            }
+
+            function setRequiredUsername() {
+                if (!usernameRequiredInput) return;
+                const username = usernameRequiredInput.value.trim();
+
+                if (!username) {
+                    alert('Please enter your name');
+                    usernameRequiredInput.focus();
+                    return;
+                }
+
+                if (username.length > 20) {
+                    alert('Name must be 20 characters or less');
+                    usernameRequiredInput.focus();
+                    return;
+                }
+
+                if (usernameRequiredBtn) {
+                    usernameRequiredBtn.disabled = true;
+                    usernameRequiredBtn.textContent = 'Setting...';
+                }
+
+                fetch('/chat/set_username', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username: username })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Update data attribute so download links work immediately
+                            document.body.setAttribute('data-username-set', 'true');
+                            document.body.setAttribute('data-username', data.username);
+
+                            // Update local variables
+                            usernameSet = true;
+                            currentUsernameValue = data.username;
+
+                            // Remove username-required class from download links
+                            document.querySelectorAll('.download-link').forEach(link => {
+                                link.classList.remove('username-required');
+                            });
+
+                            if (usernameRequiredModal) usernameRequiredModal.classList.remove('active');
+                            if (fileInput) fileInput.disabled = false;
+                            const uploadBtn = document.querySelector('.upload-button');
+                            if (uploadBtn) uploadBtn.disabled = false;
+                            // Reload page to update username display everywhere
+                            window.location.reload();
+                        } else {
+                            alert('Failed to set username: ' + (data.error || 'Unknown error'));
+                            if (usernameRequiredBtn) {
+                                usernameRequiredBtn.disabled = false;
+                                usernameRequiredBtn.textContent = 'Continue';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error setting username:', error);
+                        alert('Error setting username. Please try again.');
+                        if (usernameRequiredBtn) {
+                            usernameRequiredBtn.disabled = false;
+                            usernameRequiredBtn.textContent = 'Continue';
+                        }
+                    });
+            }
+
+            if (fileInput) {
+                fileInput.addEventListener('change', function () {
+                    if (this.files.length > 0) {
+                        fileNameDisplay.textContent = `Selected: ${this.files[0].name}`;
+                        if (usernameSet) {
+                            if (uploadUsernameDisplay) {
+                                uploadUsernameDisplay.style.display = 'block';
+                                uploadUsernameDisplay.innerHTML = `Uploading as: <strong>${currentUsernameValue}</strong>`;
+                            }
+                        }
+                    } else {
+                        fileNameDisplay.textContent = '';
+                        if (uploadUsernameDisplay) uploadUsernameDisplay.style.display = 'none';
                     }
-                    if (assemblingBadge) {
-                        assemblingBadge.style.display = 'none';
+                });
+            }
+
+            // Block download if username not set - use event delegation for dynamic links
+            // This ensures it works even if links are added dynamically
+            document.addEventListener('click', function (e) {
+                var target = e.target;
+                // Check if clicked element is a download link or inside one
+                var downloadLink = null;
+
+                // Check if target itself is a download link
+                if (target && target.classList && target.classList.contains('download-link')) {
+                    downloadLink = target;
+                } else if (target && target.closest) {
+                    // Check if target is inside a download link
+                    downloadLink = target.closest('.download-link');
+                } else if (target && target.parentElement) {
+                    // Fallback for older browsers
+                    var parent = target.parentElement;
+                    while (parent && parent !== document.body) {
+                        if (parent.classList && parent.classList.contains('download-link')) {
+                            downloadLink = parent;
+                            break;
+                        }
+                        parent = parent.parentElement;
                     }
                 }
+
+                if (downloadLink) {
+                    // Re-check username status dynamically from data attribute
+                    var currentUsernameSet = document.body.getAttribute('data-username-set') === 'true';
+
+                    if (!currentUsernameSet) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+
+                        // Show alert and modal
+                        alert('Please enter your name first before downloading files.');
+
+                        if (usernameRequiredModal) {
+                            usernameRequiredModal.classList.add('active');
+                            if (usernameRequiredInput) {
+                                usernameRequiredInput.focus();
+                            }
+                        }
+                        return false;
+                    }
+                    // If username is set, allow normal download (don't prevent default)
+                }
+            }, true); // Use capture phase to catch it early
+
+            // File Info Modal Functions
+            function showFileInfo(filename) {
+                fetch(`/file_info/${encodeURIComponent(filename)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert('Error loading file information: ' + data.error);
+                            return;
+                        }
+
+                        const modal = document.getElementById('fileInfoModal');
+                        const title = document.getElementById('fileInfoTitle');
+                        const content = document.getElementById('fileInfoContent');
+
+                        title.textContent = `File: ${filename}`;
+
+                        const fileSize = data.file_size || 0;
+                        const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+
+                        let html = `
+                <div class="file-info-item">
+                    <div class="file-info-label">Uploaded By:</div>
+                    <div class="file-info-value"><strong>${escapeHtml(data.uploaded_by || 'Unknown')}</strong></div>
+                </div>
+                <div class="file-info-item">
+                    <div class="file-info-label">Upload Time:</div>
+                    <div class="file-info-value">${escapeHtml(data.upload_time || 'Unknown')}</div>
+                </div>
+                <div class="file-info-item">
+                    <div class="file-info-label">File Size:</div>
+                    <div class="file-info-value">${fileSizeMB} MB (${fileSize.toLocaleString()} bytes)</div>
+                </div>
+                <div class="file-info-item">
+                    <div class="file-info-label">Total Downloads:</div>
+                    <div class="file-info-value">${data.downloads ? data.downloads.length : 0}</div>
+                </div>
+            `;
+
+                        if (data.downloads && data.downloads.length > 0) {
+                            html += `
+                    <div class="file-info-item">
+                        <div class="file-info-label">Download History:</div>
+                        <ul class="download-list">
+                `;
+                            data.downloads.forEach(download => {
+                                html += `
+                        <li class="download-list-item">
+                            <strong>${escapeHtml(download.username || 'Unknown')}</strong> - ${escapeHtml(download.timestamp || 'Unknown')}
+                        </li>
+                    `;
+                            });
+                            html += `</ul></div>`;
+                        } else {
+                            html += `
+                    <div class="file-info-item">
+                        <div class="file-info-value" style="color: #999; font-style: italic;">No downloads yet</div>
+                    </div>
+                `;
+                        }
+
+                        content.innerHTML = html;
+                        modal.classList.add('active');
+                    })
+                    .catch(error => {
+                        console.error('Error fetching file info:', error);
+                        alert('Error loading file information. Please try again.');
+                    });
+            }
+
+            function closeFileInfoModal() {
+                document.getElementById('fileInfoModal').classList.remove('active');
+            }
+
+            // Parallel upload
+            document.getElementById('uploadForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+
+                const file = fileInput.files[0];
+                if (!file) return;
+
+                const progressContainer = document.getElementById('progressContainer');
+                const progressFill = document.getElementById('progressFill');
+                const speedDisplay = document.getElementById('speedDisplay');
+
+                progressContainer.style.display = 'block';
+
+                const chunkSize = 1 * 1024 * 1024; // 1MB chunks (better for large files)
+                const numStreams = 4;
+                const totalChunks = Math.ceil(file.size / chunkSize);
+                let completedChunks = 0;
+                let startTime = Date.now();
+                let uploadedBytes = 0;
+
+                const chunksPerStream = Math.ceil(totalChunks / numStreams);
+                const streams = [];
+
+                for (let streamId = 0; streamId < numStreams; streamId++) {
+                    const startChunk = streamId * chunksPerStream;
+                    const endChunk = Math.min(startChunk + chunksPerStream, totalChunks);
+
+                    if (startChunk < totalChunks) {
+                        streams.push({ streamId, startChunk, endChunk });
+                    }
+                }
+
+                let activeStreams = streams.length;
+
+                streams.forEach(stream => {
+                    uploadStream(file, stream, chunkSize, function (progress, bytes) {
+                        completedChunks += progress;
+                        uploadedBytes += bytes;
+
+                        const percent = (completedChunks / totalChunks) * 100;
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        const speed = uploadedBytes / elapsed / (1024 * 1024);
+
+                        progressFill.style.width = percent + '%';
+                        progressFill.textContent = Math.round(percent) + '%';
+                        speedDisplay.textContent = `Speed: ${speed.toFixed(2)} MB/s`;
+                    }, function () {
+                        activeStreams--;
+                        if (activeStreams === 0) {
+                            progressFill.textContent = 'Complete!';
+                            setTimeout(() => window.location.reload(), 500);
+                        }
+                    });
+                });
             });
-        })
-        .catch(error => {
-            console.error('Error checking file status:', error);
-        });
-}
 
-// Check file status every 2 seconds
-setInterval(checkFileStatus, 2000);
-// Check immediately on page load
-checkFileStatus();
+            function uploadStream(file, stream, chunkSize, onProgress, onComplete) {
+                const { streamId, startChunk, endChunk } = stream;
+                let currentChunk = startChunk;
+                let retryCount = 0;
+                const MAX_RETRIES = 5;
 
-// Chat functionality
-const chatPopup = document.getElementById('chatPopup');
-const chatMessagesPopup = document.getElementById('chatMessagesPopup');
-const chatInputPopup = document.getElementById('chatInputPopup');
-const sendBtnPopup = document.getElementById('sendBtnPopup');
-const emptyChatPopup = document.getElementById('emptyChatPopup');
-const chatFloatBtn = document.getElementById('chatFloatBtn');
-const usernameSetup = document.getElementById('usernameSetup');
-const usernameSetupInput = document.getElementById('usernameSetupInput');
-const usernameDisplayHeader = document.getElementById('usernameDisplayHeader');
-const currentUsernameText = document.getElementById('currentUsernameText');
-const usernameModal = document.getElementById('usernameModal');
-const editUsernameInput = document.getElementById('editUsernameInput');
-let chatOpen = false;
-let lastMessageCount = 0;
-let usernameConfigured = false;
-let currentUsername = '';
+                function uploadNextChunk() {
+                    if (currentChunk >= endChunk) {
+                        console.log(`Stream ${streamId} completed`);
+                        onComplete();
+                        return;
+                    }
 
-function toggleChat() {
-    chatOpen = !chatOpen;
-    if (chatOpen) {
-        chatPopup.classList.add('active');
-        if (!usernameConfigured) {
-            usernameSetupInput.focus();
-        } else {
-            chatInputPopup.focus();
-        }
-        scrollChatToBottom();
-        chatFloatBtn.classList.remove('has-messages');
-    } else {
-        chatPopup.classList.remove('active');
-    }
-}
+                    const start = currentChunk * chunkSize;
+                    const end = Math.min(start + chunkSize, file.size);
+                    const chunk = file.slice(start, end);
 
-function setupUsername() {
-    const username = usernameSetupInput.value.trim();
-    
-    if (!username) {
-        alert('Please enter a name');
-        return;
-    }
-    
-    if (username.length > 20) {
-        alert('Name must be 20 characters or less');
-        return;
-    }
-    
-    // Set username on server
-    fetch('/chat/set_username', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username: username })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            currentUsername = data.username;
-            currentUsernameText.textContent = currentUsername;
-            usernameConfigured = true;
-            usernameSetup.classList.remove('active');
-            usernameDisplayHeader.style.display = 'flex';
+                    const formData = new FormData();
+                    formData.append('chunk', chunk);
+                    formData.append('chunkIndex', currentChunk);
+                    formData.append('totalChunks', Math.ceil(file.size / chunkSize));
+                    formData.append('filename', file.name);
+                    formData.append('streamId', streamId);
+
+                    console.log(`Stream ${streamId}: Uploading chunk ${currentChunk} (${chunk.size} bytes)`);
+
+                    fetch('/upload_chunk', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data.success) {
+                                console.log(`Stream ${streamId}: Chunk ${currentChunk} uploaded successfully`);
+                                onProgress(1, chunk.size);
+                                currentChunk++;
+                                retryCount = 0; // Reset retry count on success
+                                uploadNextChunk();
+                            } else {
+                                throw new Error(data.error || 'Upload failed');
+                            }
+                        })
+                        .catch(err => {
+                            console.error(`Stream ${streamId} chunk ${currentChunk} error:`, err);
+                            retryCount++;
+
+                            if (retryCount < MAX_RETRIES) {
+                                console.log(`Stream ${streamId}: Retrying chunk ${currentChunk} (attempt ${retryCount}/${MAX_RETRIES})`);
+                                setTimeout(uploadNextChunk, 1000 * retryCount); // Exponential backoff
+                            } else {
+                                console.error(`Stream ${streamId}: Failed after ${MAX_RETRIES} retries`);
+                                alert(`Upload failed for chunk ${currentChunk}. Please try again.`);
+                            }
+                        });
+                }
+
+                uploadNextChunk();
+            }
+
+            const searchInput = document.getElementById("searchInput");
+            const sortSelect = document.getElementById("sortSelect");
+            const filterSelect = document.getElementById("filterSelect");
+
+            function updateFileView() {
+                const files = Array.from(document.querySelectorAll(".file-item"));
+                const query = searchInput.value.toLowerCase();
+                const filter = filterSelect.value;
+                const sort = sortSelect.value;
+
+                let visibleFiles = files.filter(item => {
+                    const name = item.dataset.filename.toLowerCase();
+                    if (!name.includes(query)) return false;
+
+                    const size = Number(item.dataset.size);
+
+                    if (filter === "large" && size <= 50) return false;
+                    if (filter === "small" && size > 50) return false;
+
+                    return true;
+                });
+
+                if (sort === "name") {
+                    visibleFiles.sort((a, b) => a.dataset.filename.localeCompare(b.dataset.filename));
+                }
+
+                if (sort === "size") {
+                    visibleFiles.sort((a, b) => Number(b.dataset.size) - Number(a.dataset.size));
+                }
+
+                if (sort === "date") {
+                    visibleFiles.sort((a, b) =>
+                        new Date(b.dataset.time) - new Date(a.dataset.time)
+                    );
+                }
+
+                visibleFiles.forEach(item => item.parentNode.appendChild(item));
+
+                files.forEach(item => {
+                    item.style.display = visibleFiles.includes(item) ? "flex" : "none";
+                });
+            }
+
+
+            searchInput.addEventListener("input", updateFileView);
+            sortSelect.addEventListener("change", updateFileView);
+            filterSelect.addEventListener("change", updateFileView);
+
+            // Monitor file assembly status
+            function checkFileStatus() {
+                fetch('/file_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        const assemblingFiles = data.assembling || [];
+
+                        // Update UI for all files
+                        document.querySelectorAll('.file-item').forEach(item => {
+                            const filename = item.dataset.filename;
+                            if (!filename) return;
+
+                            const downloadLink = item.querySelector('.download-link');
+                            const assemblingBadge = item.querySelector('.assembling-badge');
+
+                            if (assemblingFiles.includes(filename)) {
+                                // File is being assembled
+                                if (downloadLink) {
+                                    downloadLink.classList.add('disabled');
+                                    downloadLink.style.display = 'none';
+                                }
+                                if (assemblingBadge) {
+                                    assemblingBadge.style.display = 'inline-block';
+                                }
+                            } else {
+                                // File is ready
+                                if (downloadLink) {
+                                    downloadLink.classList.remove('disabled');
+                                    downloadLink.style.display = 'inline-block';
+                                }
+                                if (assemblingBadge) {
+                                    assemblingBadge.style.display = 'none';
+                                }
+                            }
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error checking file status:', error);
+                    });
+            }
+
+            // Check file status every 2 seconds
+            setInterval(checkFileStatus, 2000);
+            // Check immediately on page load
+            checkFileStatus();
+
+            // Chat functionality
+            const chatPopup = document.getElementById('chatPopup');
+            const chatMessagesPopup = document.getElementById('chatMessagesPopup');
+            const chatInputPopup = document.getElementById('chatInputPopup');
+            const sendBtnPopup = document.getElementById('sendBtnPopup');
+            const emptyChatPopup = document.getElementById('emptyChatPopup');
+            const chatFloatBtn = document.getElementById('chatFloatBtn');
+            const usernameDisplayHeader = document.getElementById('usernameDisplayHeader');
+            const currentUsernameText = document.getElementById('currentUsernameText');
+            const usernameModal = document.getElementById('usernameModal');
+            const editUsernameInput = document.getElementById('editUsernameInput');
+
+            // Get username from session (set at login)
+            let currentUsername = document.body.getAttribute('data-username') || '';
+            let chatOpen = false;
+            let lastMessageCount = 0;
+
+            // Initialize chat with username from login
+            if (currentUsername && currentUsernameText) {
+                currentUsernameText.textContent = currentUsername;
+                usernameDisplayHeader.style.display = 'flex';
+            }
+
+            function toggleChat() {
+                chatOpen = !chatOpen;
+                if (chatOpen) {
+                    chatPopup.classList.add('active');
+                    chatInputPopup.focus();
+                    scrollChatToBottom();
+                    chatFloatBtn.classList.remove('has-messages');
+                } else {
+                    chatPopup.classList.remove('active');
+                }
+            }
+
+            function openEditUsernameModal() {
+                editUsernameInput.value = currentUsername;
+                usernameModal.classList.add('active');
+                editUsernameInput.focus();
+                editUsernameInput.select();
+            }
+
+            function kickUser(username) {
+                if (!confirm(`Kick ${username} from server?`)) return;
+
+                fetch('/admin/kick_user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert(data.error || 'Kick failed');
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('Server error while kicking user');
+                });
+            }
+
+            function closeEditUsernameModal() {
+                usernameModal.classList.remove('active');
+            }
+
+            function saveEditedUsername() {
+                const username = editUsernameInput.value.trim();
+
+                if (!username) {
+                    alert('Please enter a name');
+                    return;
+                }
+
+                if (username.length > 20) {
+                    alert('Name must be 20 characters or less');
+                    return;
+                }
+
+                if (username === currentUsername) {
+                    closeEditUsernameModal();
+                    return;
+                }
+
+                fetch('/chat/set_username', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username: username })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            currentUsername = data.username;
+                            currentUsernameText.textContent = currentUsername;
+                            closeEditUsernameModal();
+                        } else {
+                            alert('Failed to change username: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error changing username:', error);
+                        alert('Error changing username. Please try again.');
+                    });
+            }
+
+            function loadChatHistory() {
+                fetch('/chat/history')
+                    .then(response => response.json())
+                    .then(messages => {
+                        if (messages.length > 0) {
+                            emptyChatPopup.style.display = 'none';
+                            messages.forEach(msg => displayChatMessage(msg));
+                            scrollChatToBottom();
+                            lastMessageCount = messages.length;
+                        }
+                    });
+            }
+
+            function startChatListener() {
+                // Listen for new messages
+                const chatEventSource = new EventSource('/chat/messages');
+                chatEventSource.onmessage = function (event) {
+                    const messages = JSON.parse(event.data);
+                    if (messages.length > 0) {
+                        emptyChatPopup.style.display = 'none';
+                        messages.forEach(msg => displayChatMessage(msg));
+                        scrollChatToBottom();
+
+                        if (!chatOpen && messages.length > lastMessageCount) {
+                            chatFloatBtn.classList.add('has-messages');
+                        }
+                        lastMessageCount = messages.length;
+                    }
+                };
+            }
+
+            // Enable chat input (username is set at login)
             chatInputPopup.disabled = false;
             sendBtnPopup.disabled = false;
-            chatInputPopup.focus();
-            
-            // Load chat history now
+
+            // Load chat history and start listener immediately
             loadChatHistory();
             startChatListener();
-        } else {
-            alert('Failed to set username: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error setting username:', error);
-        alert('Error setting username. Please try again.');
-    });
-}
 
-function openEditUsernameModal() {
-    editUsernameInput.value = currentUsername;
-    usernameModal.classList.add('active');
-    editUsernameInput.focus();
-    editUsernameInput.select();
-}
+            // Handle Enter key in edit modal
+            editUsernameInput.addEventListener('keypress', function (event) {
+                if (event.key === 'Enter') {
+                    saveEditedUsername();
+                }
+            });
 
-function closeEditUsernameModal() {
-    usernameModal.classList.remove('active');
-}
+            // Close modal when clicking outside
+            usernameModal.addEventListener('click', function (e) {
+                if (e.target === usernameModal) {
+                    closeEditUsernameModal();
+                }
+            });
 
-function saveEditedUsername() {
-    const username = editUsernameInput.value.trim();
-    
-    if (!username) {
-        alert('Please enter a name');
-        return;
-    }
-    
-    if (username.length > 20) {
-        alert('Name must be 20 characters or less');
-        return;
-    }
-    
-    if (username === currentUsername) {
-        closeEditUsernameModal();
-        return;
-    }
-    
-    fetch('/chat/set_username', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username: username })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            currentUsername = data.username;
-            currentUsernameText.textContent = currentUsername;
-            closeEditUsernameModal();
-        } else {
-            alert('Failed to change username: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error changing username:', error);
-        alert('Error changing username. Please try again.');
-    });
-}
+            function displayChatMessage(msg) {
+                const existingMessages = Array.from(chatMessagesPopup.children);
+                const isDuplicate = existingMessages.some(el => {
+                    if (el.classList.contains('empty-chat-popup')) return false;
+                    const timeEl = el.querySelector('.message-time');
+                    const usernameEl = el.querySelector('.message-username');
+                    const contentEl = el.querySelector('.message-content');
 
-function loadChatHistory() {
-    fetch('/chat/history')
-        .then(response => response.json())
-        .then(messages => {
-            if (messages.length > 0) {
-                emptyChatPopup.style.display = 'none';
-                messages.forEach(msg => displayChatMessage(msg));
-                scrollChatToBottom();
-                lastMessageCount = messages.length;
-            }
-        });
-}
+                    return timeEl && usernameEl && contentEl &&
+                        timeEl.textContent === msg.timestamp &&
+                        usernameEl.textContent === msg.username &&
+                        contentEl.textContent === msg.message;
+                });
 
-function startChatListener() {
-    // Listen for new messages
-    const chatEventSource = new EventSource('/chat/messages');
-    chatEventSource.onmessage = function(event) {
-        const messages = JSON.parse(event.data);
-        if (messages.length > 0) {
-            emptyChatPopup.style.display = 'none';
-            messages.forEach(msg => displayChatMessage(msg));
-            scrollChatToBottom();
-            
-            if (!chatOpen && messages.length > lastMessageCount) {
-                chatFloatBtn.classList.add('has-messages');
-            }
-            lastMessageCount = messages.length;
-        }
-    };
-}
+                if (isDuplicate) return;
 
-// Disable input initially
-chatInputPopup.disabled = true;
-sendBtnPopup.disabled = true;
-
-// Handle Enter key in username setup
-usernameSetupInput.addEventListener('keypress', function(event) {
-    if (event.key === 'Enter') {
-        setupUsername();
-    }
-});
-
-// Handle Enter key in edit modal
-editUsernameInput.addEventListener('keypress', function(event) {
-    if (event.key === 'Enter') {
-        saveEditedUsername();
-    }
-});
-
-// Close modal when clicking outside
-usernameModal.addEventListener('click', function(e) {
-    if (e.target === usernameModal) {
-        closeEditUsernameModal();
-    }
-});
-
-function displayChatMessage(msg) {
-    const existingMessages = Array.from(chatMessagesPopup.children);
-    const isDuplicate = existingMessages.some(el => {
-        if (el.classList.contains('empty-chat-popup')) return false;
-        const timeEl = el.querySelector('.message-time');
-        const usernameEl = el.querySelector('.message-username');
-        const contentEl = el.querySelector('.message-content');
-        
-        return timeEl && usernameEl && contentEl &&
-               timeEl.textContent === msg.timestamp &&
-               usernameEl.textContent === msg.username &&
-               contentEl.textContent === msg.message;
-    });
-    
-    if (isDuplicate) return;
-    
-    if (msg.type === 'system') {
-        const systemMsg = document.createElement('div');
-        systemMsg.className = 'message-system';
-        systemMsg.textContent = msg.message;
-        chatMessagesPopup.appendChild(systemMsg);
-    } else {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message';
-        messageDiv.innerHTML = `
+                if (msg.type === 'system') {
+                    const systemMsg = document.createElement('div');
+                    systemMsg.className = 'message-system';
+                    systemMsg.textContent = msg.message;
+                    chatMessagesPopup.appendChild(systemMsg);
+                } else {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'chat-message';
+                    messageDiv.innerHTML = `
             <div class="message-header">
                 <span class="message-username">${escapeHtml(msg.username)}</span>
                 <span class="message-time">${msg.timestamp}</span>
             </div>
             <div class="message-content">${escapeHtml(msg.message)}</div>
         `;
-        chatMessagesPopup.appendChild(messageDiv);
-    }
-}
+                    chatMessagesPopup.appendChild(messageDiv);
+                }
+            }
 
-function sendMessagePopup() {
-    const message = chatInputPopup.value.trim();
-    if (!message) return;
+            function sendMessagePopup() {
+                const message = chatInputPopup.value.trim();
+                if (!message) return;
 
-    sendBtnPopup.disabled = true;
-    
-    fetch('/chat/send', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: message })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            chatInputPopup.value = '';
-        }
-        sendBtnPopup.disabled = false;
-        chatInputPopup.focus();
-    })
-    .catch(error => {
-        console.error('Error sending message:', error);
-        sendBtnPopup.disabled = false;
-    });
-}
+                sendBtnPopup.disabled = true;
 
-function handleChatKeypressPopup(event) {
-    if (event.key === 'Enter') {
-        sendMessagePopup();
-    }
-}
+                fetch('/chat/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            chatInputPopup.value = '';
+                        }
+                        sendBtnPopup.disabled = false;
+                        chatInputPopup.focus();
+                    })
+                    .catch(error => {
+                        console.error('Error sending message:', error);
+                        sendBtnPopup.disabled = false;
+                    });
+            }
 
-function scrollChatToBottom() {
-    chatMessagesPopup.scrollTop = chatMessagesPopup.scrollHeight;
-}
+            function deleteFile(filename) {
+                if (!confirm(`Delete ${filename}? This cannot be undone.`)) return;
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-</script>
+                fetch(`/delete_file/${encodeURIComponent(filename)}`, { method: "POST" })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.querySelector(`[data-filename="${filename}"]`).remove();
+                        } else {
+                            alert(data.error || "Delete failed");
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        alert("Server error while deleting file");
+                    });
+            }
+
+            function handleChatKeypressPopup(event) {
+                if (event.key === 'Enter') {
+                    sendMessagePopup();
+                }
+            }
+
+            function scrollChatToBottom() {
+                chatMessagesPopup.scrollTop = chatMessagesPopup.scrollHeight;
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            // Online Users Dropdown Logic
+            const usersDropdownBtn = document.getElementById('usersDropdownBtn');
+            const usersDropdownMenu = document.getElementById('usersDropdownMenu');
+            const usersList = document.getElementById('usersList');
+
+            function loadOnlineUsers() {
+                fetch('/online_users')
+                    .then(response => response.json())
+                    .then(data => {
+                        const users = data.users || [];
+                        if (users.length === 0) {
+                            usersList.innerHTML = '<li class="no-users">No users online</li>';
+                        } else {
+                            usersList.innerHTML = users.map(user => `
+                            <li class="user-item ${user.is_server ? 'server' : ''}">
+                                <span class="user-indicator"></span>
+                                <span class="user-name">${escapeHtml(user.username)}</span>
+                                ${user.is_server ? '<span class="user-badge">Server</span>' : '<span class="user-badge">Client</span>'}
+                                ${user.is_server ? '' : `<button class="kick-btn" onclick="kickUser('${escapeHtml(user.username)}')">Kick</button>`}
+                            </li>
+                            `).join('');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading online users:', error);
+                        usersList.innerHTML = '<li class="no-users">Error loading users</li>';
+                    });
+            }
+
+            // Toggle dropdown
+            if (usersDropdownBtn) {
+                usersDropdownBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const isActive = usersDropdownMenu.classList.contains('active');
+                    if (isActive) {
+                        usersDropdownMenu.classList.remove('active');
+                        usersDropdownBtn.classList.remove('active');
+                    } else {
+                        usersDropdownMenu.classList.add('active');
+                        usersDropdownBtn.classList.add('active');
+                        loadOnlineUsers();
+                    }
+                });
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', function (e) {
+                    if (!usersDropdownBtn.contains(e.target) && !usersDropdownMenu.contains(e.target)) {
+                        usersDropdownMenu.classList.remove('active');
+                        usersDropdownBtn.classList.remove('active');
+                    }
+                });
+
+                // Load users periodically
+                setInterval(loadOnlineUsers, 5000);
+                loadOnlineUsers();
+            }
+        </script>
 </body>
+
 </html>

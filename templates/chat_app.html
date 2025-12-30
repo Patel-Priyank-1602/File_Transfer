@@ -405,7 +405,7 @@
     }
 </style>
 </head>
-<body>
+<body data-username="{{ username or '' }}">
 <div class="chat-container">
     <!-- Header -->
     <div class="chat-header">
@@ -465,11 +465,30 @@
     const usernameModal = document.getElementById('usernameModal');
     const newUsernameInput = document.getElementById('newUsernameInput');
     
-    let currentUsername = 'Loading...';
+    // Get username from body data attribute (set from session)
+    let currentUsername = document.body.getAttribute('data-username') || '';
     let messageCount = 0;
 
     // Initialize - Load chat history
     function init() {
+        // Set username display immediately
+        if (currentUsername) {
+            currentUsernameEl.textContent = currentUsername;
+        } else {
+            // If no username, try to get from server
+            fetch('/check_username')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.username_set && data.username) {
+                        currentUsername = data.username;
+                        currentUsernameEl.textContent = data.username;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking username:', error);
+                });
+        }
+        
         fetch('/chat/history')
             .then(response => response.json())
             .then(messages => {
@@ -477,11 +496,6 @@
                     emptyChat.style.display = 'none';
                     messages.forEach(msg => displayMessage(msg));
                     scrollToBottom();
-                }
-                
-                // Get current username from first message or session
-                if (messages.length > 0) {
-                    // We'll get it from the SSE stream
                 }
             })
             .catch(error => {
@@ -502,22 +516,6 @@
         chatEventSource.onerror = function(error) {
             console.error('SSE connection error:', error);
         };
-        
-        // Set current username (we'll get it from a cookie or session)
-        updateCurrentUsername();
-    }
-    
-    function updateCurrentUsername() {
-        // Try to get username from session/cookie
-        // For now, we'll extract it from the page context or use a default
-        const usernameMatch = document.body.innerHTML.match(/User_[a-f0-9]{6}/);
-        if (usernameMatch) {
-            currentUsername = usernameMatch[0];
-            currentUsernameEl.textContent = currentUsername;
-        } else {
-            currentUsername = 'User';
-            currentUsernameEl.textContent = 'User';
-        }
     }
     
     function displayMessage(msg) {
@@ -629,6 +627,11 @@
             return;
         }
         
+        if (newUsername === currentUsername) {
+            closeUsernameModal();
+            return;
+        }
+        
         fetch('/chat/set_username', {
             method: 'POST',
             headers: {
@@ -641,7 +644,11 @@
             if (data.success) {
                 currentUsername = data.username;
                 currentUsernameEl.textContent = data.username;
+                // Update body attribute
+                document.body.setAttribute('data-username', data.username);
                 closeUsernameModal();
+                // Reload to update everywhere
+                window.location.reload();
             } else {
                 alert('Failed to change username: ' + (data.error || 'Unknown error'));
             }
