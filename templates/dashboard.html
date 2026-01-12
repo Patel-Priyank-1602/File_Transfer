@@ -1298,6 +1298,40 @@
             transition: background 0.2s;
         }
 
+        .docs-outline-btn {
+            padding: 12px 22px;
+            border: 1.5px solid #000;
+            background: white;
+            color: #000;
+            border-radius: 8px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.25s ease;
+        }
+
+        .docs-outline-btn:hover {
+            background: #f4f4f4;
+            transform: translateY(-1px);
+        }
+
+        .docs-outline-btn:active {
+            transform: scale(0.97);
+        }
+
+        .docs-outline-btn .arrow {
+            font-size: 0.8rem;
+            transition: transform 0.25s ease;
+        }
+
+        .docs-outline-btn:hover .arrow {
+            transform: rotate(180deg);
+        }
+
         .username-required-btn:hover {
             background: #0056b3;
         }
@@ -1427,7 +1461,15 @@
                 <div class="upload-username-display" id="uploadUsernameDisplay" style="display: none;">
                     Uploading as: <strong>{{ username }}</strong>
                 </div>
-                <input type="submit" value="Upload File" class="upload-button">
+                <div class="upload-action-row">
+                    <input type="submit" value="Upload File" class="upload-button">
+
+                    <a href="https://lftdocs.netlify.app/" target="_blank" class="docs-outline-btn">
+                        Documentation
+                    </a>
+
+                </div>
+
                 <div class="progress-container" id="progressContainer">
                     <div class="progress-bar">
                         <div class="progress-fill" id="progressFill">0%</div>
@@ -2134,16 +2176,16 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username })
                 })
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.success) {
-                        alert(data.error || 'Kick failed');
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert('Server error while kicking user');
-                });
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data.success) {
+                            alert(data.error || 'Kick failed');
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        alert('Server error while kicking user');
+                    });
             }
 
             function closeEditUsernameModal() {
