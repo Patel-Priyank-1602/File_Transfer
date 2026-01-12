@@ -1,3 +1,6 @@
+# It's Old Readme Later I will Update 
+# For Now go and see [LFTDocs](https://lftdocs.netlify.app/) For Latest Upadtes
+
 # 📁 File Transfer Server
 
 A **secure, local file-sharing server** that runs over your PC’s Wi-Fi hotspot.  
