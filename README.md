@@ -1,10 +1,17 @@
-# It's Old Readme Later I will Update 
-# For Now go and see [LFTDocs](https://lftdocs.netlify.app/) For Latest Upadtes
+# 📁 Local File Transfer Server (LFT)
 
-# 📁 File Transfer Server
+A **secure, offline-first local file transfer server** that runs on your PC’s **Wi-Fi hotspot**.  
+Seamlessly share files between **PC and mobile devices** — **no internet required** ⚡
 
-A **secure, local file-sharing server** that runs over your PC’s Wi-Fi hotspot.  
-Share files between your **PC and mobile devices** — No internet is required while transferring files! ⚡  
+> 🔒 Fully local • 🚀 Fast • 🌐 No cloud • 📱 Mobile-friendly
+
+---
+
+## 📘 Documentation
+
+For detailed architecture, API routes, setup guides, and screenshots, visit:
+
+👉 **LFTDocs:** https://lftdocs.netlify.app/
 
 ---
 
