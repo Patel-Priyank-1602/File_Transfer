@@ -4,6 +4,9 @@ import os
 import qrcode
 import io
 import base64
+import zipfile
+import shutil
+import uuid
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 import mimetypes
@@ -31,12 +34,12 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY")
+app.secret_key = os.urandom(24) # Random key on every start to invalidate sessions
 
 # Performance Configuration
 CHUNK_SIZE = 2 * 1024 * 1024  # 2MB chunks for download
-MAX_CONTENT_LENGTH = 10 * 1024 * 1024 * 1024  # 10GB max file size
-app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+# No global content length limit - uploads are chunked (each chunk ~5MB)
+app.config['MAX_CONTENT_LENGTH'] = None
 
 NUM_PARALLEL_STREAMS = 4
 STREAM_CHUNK_SIZE = 1 * 1024 * 1024  # 1MB chunks for upload (better for large files)
@@ -58,6 +61,14 @@ transfer_lock = threading.Lock()
 assembling_files = set()
 assembling_lock = threading.Lock()
 
+# Track folder uploads in progress
+folder_uploads = {}  # {folder_id: {'folder_name': str, 'files': [], 'total_size': 0, 'start_time': float}}
+folder_uploads_lock = threading.Lock()
+
+# Track folder finalization (async ZIP creation)
+folder_finalize_status = {}  # {folder_id: {'status': 'processing'|'complete'|'error', ...}}
+folder_finalize_lock = threading.Lock()
+
 # Chat Configuration
 chat_messages = []
 chat_lock = threading.Lock()
@@ -65,12 +76,20 @@ MAX_MESSAGES = 100
 connected_users = {}  # {session_id: {'username': str, 'last_seen': timestamp, 'is_server': bool}}
 kicked_users = set()
 kicked_lock = threading.Lock()
+
+# Join Permission System
+pending_clients = {}  # {client_id: {'name': str, 'status': 'pending'|'approved'|'rejected', 'timestamp': float, 'ip': str}}
+pending_clients_lock = threading.Lock()
 user_lock = threading.Lock()
 USER_TIMEOUT = 30  # seconds - consider user offline after this time
 
 # File metadata tracking
 file_metadata = {}
 metadata_lock = threading.Lock()
+
+# Client History Tracking
+client_history = []  # List of {name, ip, action, timestamp}
+history_lock = threading.Lock()
 
 
 def set_user_role(role):
@@ -299,7 +318,7 @@ def check_if_kicked():
     with kicked_lock:
         if username in kicked_users:
             session.clear()
-            return redirect(url_for("login"))
+            return redirect(url_for("join_page"))
 
 # Routes
 @app.route("/", methods=["GET", "POST"])
@@ -326,6 +345,8 @@ def login():
                 
                 # Set access token for /files route (for remote users)
                 session["files_access_token"] = "granted"
+                # Admin login always gets join approval
+                session["join_approved"] = True
                 
                 # Set session as permanent so it persists across page refreshes
                 # This allows users to refresh without being redirected to login
@@ -360,6 +381,189 @@ def login():
     
     return render_template("login.html", error=error)
 
+# ============ CLIENT JOIN PERMISSION SYSTEM ============
+
+@app.route("/join")
+def join_page():
+    """Client join page - only requires entering a name"""
+    # If already approved, redirect to files
+    if session.get('join_approved') and session.get('logged_in'):
+        return redirect(url_for('files'))
+    return render_template("join.html")
+
+@app.route("/join/request", methods=["POST"])
+def join_request():
+    """Client submits a join request with their name"""
+    try:
+        data = request.json
+        client_name = data.get('name', '').strip()
+        
+        if not client_name:
+            return jsonify({'success': False, 'error': 'Please enter your name'}), 400
+        
+        if len(client_name) > 20:
+            return jsonify({'success': False, 'error': 'Name must be 20 characters or less'}), 400
+        
+        # Check if this name is kicked - MODIFIED: Allow them to request again
+        # The kick is a "reset", so we don't block them here.
+        # However, they are still in kicked_users until approved again.
+        # with kicked_lock:
+        #     if client_name in kicked_users:
+        #         return jsonify({'success': False, 'error': 'You have been blocked from this session'}), 403
+        
+        # Generate a unique client ID
+        client_id = str(uuid.uuid4())
+        
+        with pending_clients_lock:
+            # Check if there's already a pending request with the same name
+            for cid, cdata in pending_clients.items():
+                if cdata['name'] == client_name and cdata['status'] == 'pending':
+                    # Return existing client ID
+                    return jsonify({'success': True, 'client_id': cid})
+            
+            pending_clients[client_id] = {
+                'name': client_name,
+                'status': 'pending',
+                'timestamp': time.time(),
+                'ip': request.remote_addr
+            }
+        
+        print(f"🔔 Join request: {client_name} (ID: {client_id[:8]}...) from {request.remote_addr}")
+        
+        return jsonify({'success': True, 'client_id': client_id})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route("/join/status/<client_id>")
+def join_status(client_id):
+    """Client polls this to check if their join request was approved/rejected"""
+    with pending_clients_lock:
+        if client_id not in pending_clients:
+            return jsonify({'status': 'unknown', 'error': 'Invalid request ID'}), 404
+        
+        client_data = pending_clients[client_id]
+        status = client_data['status']
+        
+        if status == 'approved':
+            # Set up the session for this client
+            session['logged_in'] = True
+            session['username'] = client_data['name']
+            session['files_access_token'] = 'granted'
+            session['join_approved'] = True
+            session.permanent = True
+            
+            # Add chat message
+            add_chat_message('System', f"{client_data['name']} joined the session", 'system')
+            
+            # Clean up
+            del pending_clients[client_id]
+            
+            return jsonify({'status': 'approved', 'redirect': url_for('files')})
+        
+        elif status == 'rejected':
+            # Clean up
+            del pending_clients[client_id]
+            return jsonify({'status': 'rejected', 'message': 'Please take permission of dashboard'})
+        
+        else:
+            return jsonify({'status': 'pending'})
+
+@app.route("/join/respond", methods=["POST"])
+@login_required
+def join_respond():
+    """Dashboard approves or rejects a join request"""
+    if session.get('role') != 'server':
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    try:
+        data = request.json
+        client_id = data.get('client_id')
+        action = data.get('action')  # 'approve' or 'reject'
+        
+        if not client_id or action not in ('approve', 'reject'):
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+        
+        with pending_clients_lock:
+            if client_id not in pending_clients:
+                return jsonify({'success': False, 'error': 'Client request not found'}), 404
+            
+            if action == 'approve':
+                pending_clients[client_id]['status'] = 'approved'
+                client_name = pending_clients[client_id]['name']
+                
+                # If they were kicked, remove them from the kicked list so they can join
+                with kicked_lock:
+                    if client_name in kicked_users:
+                        kicked_users.remove(client_name)
+                
+                # Add to history
+                with history_lock:
+                    client_history.insert(0, {
+                        'name': client_name,
+                        'ip': pending_clients[client_id]['ip'],
+                        'action': 'Accepted',
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                
+                print(f"✅ Approved: {client_name}")
+            else:
+                pending_clients[client_id]['status'] = 'rejected'
+                client_name = pending_clients[client_id]['name']
+                
+                # Add to history
+                with history_lock:
+                    client_history.insert(0, {
+                        'name': client_name,
+                        'ip': pending_clients[client_id]['ip'],
+                        'action': 'Rejected',
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                
+                print(f"❌ Rejected: {client_name}")
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route("/join/pending")
+@login_required
+def join_pending():
+    """Get list of pending join requests (for dashboard)"""
+    if session.get('role') != 'server':
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    with pending_clients_lock:
+        # Clean up old pending requests (older than 5 minutes)
+        current_time = time.time()
+        to_remove = [cid for cid, cdata in pending_clients.items() 
+                     if current_time - cdata['timestamp'] > 300 and cdata['status'] == 'pending']
+        for cid in to_remove:
+            del pending_clients[cid]
+        
+        pending = []
+        for cid, cdata in pending_clients.items():
+            if cdata['status'] == 'pending':
+                pending.append({
+                    'client_id': cid,
+                    'name': cdata['name'],
+                    'ip': cdata['ip'],
+                    'timestamp': datetime.fromtimestamp(cdata['timestamp']).strftime('%H:%M:%S')
+                })
+        
+        return jsonify({'pending': pending})
+
+@app.route("/api/history")
+@login_required
+def get_client_history():
+    """Get history of client accept/reject actions"""
+    if session.get('role') != 'server':
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    with history_lock:
+        return jsonify(client_history)
+
+# ============ END CLIENT JOIN PERMISSION SYSTEM ============
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -376,7 +580,7 @@ def dashboard():
     wifi_string = f"WIFI:T:WPA;S:{HOTSPOT_SSID};P:{HOTSPOT_PASSWORD};;"
     wifi_qr_uri = create_qr_data_uri(wifi_string)
 
-    url_string = f"http://{HOTSPOT_IP}:{PORT}/files"
+    url_string = f"http://{HOTSPOT_IP}:{PORT}/join"
     url_qr_uri = create_qr_data_uri(url_string)
     
     file_list = [f for f in os.listdir(UPLOAD_FOLDER) if not f.startswith('.')]
@@ -411,9 +615,18 @@ def files():
     set_user_role('client')
     # Check for valid session and username - allow refresh without redirecting to login
     if 'logged_in' not in session or not is_username_set():
-        # No valid session - clear and redirect to login
+        # No valid session - clear and redirect
         session.clear()
-        return redirect(url_for('login', next=request.url))
+        
+        # Check if request is from localhost
+        is_localhost = (request.remote_addr in ['127.0.0.1', 'localhost', '::1'] or 
+                        '127.0.0.1' in request.host or 
+                        'localhost' in request.host)
+                        
+        if is_localhost:
+            return redirect(url_for('login', next=request.url))
+        else:
+            return redirect(url_for('join_page'))
     
     # Check for access token only on FIRST access (after login)
     # If token exists, set it as permanent so refresh works
@@ -437,6 +650,14 @@ def files():
         session.clear()
         return redirect(url_for('login', next=request.url))
     
+    # Enforce join approval for remote users
+    is_localhost = (request.remote_addr in ['127.0.0.1', 'localhost', '::1'] or 
+                    '127.0.0.1' in request.host or 
+                    'localhost' in request.host)
+    
+    if not is_localhost and not session.get('join_approved'):
+        return redirect(url_for('join_page'))
+    
     file_list = [f for f in os.listdir(UPLOAD_FOLDER) if not f.startswith('.')]
     username_set = is_username_set()
     
@@ -453,6 +674,108 @@ def files():
     # Don't remove it - this allows users to refresh without being redirected to login
     
     return render_template("files.html", files=file_list, username=username or '', username_set=username_set, assembling_files=assembling_list, files_metadata=files_metadata,)
+
+def get_file_icon(filename):
+    """Generate SVG icon based on file type"""
+    ext = filename.lower().split('.')[-1] if '.' in filename else ''
+    
+    # Define icon SVGs for different file types
+    icons = {
+        'folder': '''<svg viewBox="0 0 24 24" class="icon-folder">
+            <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+        </svg>''',
+        'pdf': '''<svg viewBox="0 0 24 24" class="icon-pdf">
+            <path d="M14,2L20,8V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2H14M18,20V9H13V4H6V20H18M10.92,12.31C10.68,11.54 10.15,9.08 11.55,9.04C12.95,9 12.03,12.16 12.03,12.16C12.42,13.65 14.05,14.72 14.05,14.72C14.55,14.57 17.4,14.24 17,15.72C16.57,17.2 13.5,15.81 13.5,15.81C11.55,15.95 10.09,16.47 10.09,16.47C8.96,18.58 7.64,19.5 7.1,18.61C6.43,17.5 9.23,16.07 9.23,16.07C10.68,13.72 10.9,12.35 10.92,12.31Z"/>
+        </svg>''',
+        'video': '''<svg viewBox="0 0 24 24" class="icon-video">
+            <path d="M18,4L20,8H17L15,4H13L15,8H12L10,4H8L10,8H7L5,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V4H18M4,12V10H8V12H4M4,18V14H8V18H4M14,18V14H8.5V18H14M20,18H14.5V14H20V18M20,12H10V10H20V12Z"/>
+        </svg>''',
+        'audio': '''<svg viewBox="0 0 24 24" class="icon-audio">
+            <path d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z"/>
+        </svg>''',
+        'image': '''<svg viewBox="0 0 24 24" class="icon-image">
+            <path d="M8.5,13.5L11,16.5L14.5,12L19,18H5M21,19V5C21,3.89 20.1,3 19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19Z"/>
+        </svg>''',
+        'zip': '''<svg viewBox="0 0 24 24" class="icon-zip">
+            <path d="M14,17H12V15H10V13H12V15H14M14,9H12V11H14V13H12V11H10V9H12V7H10V5H12V7H14M19,3A2,2 0 0,1 21,5V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3H19M19,5H5V19H19V5Z"/>
+        </svg>''',
+        'document': '''<svg viewBox="0 0 24 24" class="icon-document">
+            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M9,13V11H7V13H9M9,17V15H7V17H9M15,15V17H17V15H15M15,11V13H17V11H15M11,17H13V15H11V17M11,13H13V11H11V13Z"/>
+        </svg>''',
+        'code': '''<svg viewBox="0 0 24 24" class="icon-code">
+            <path d="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"/>
+        </svg>''',
+        'default': '''<svg viewBox="0 0 24 24" class="icon-default">
+            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+        </svg>'''
+    }
+    
+    # Map extensions to icon types
+    ext_map = {
+        # PDF
+        'pdf': 'pdf',
+        # Video
+        'mp4': 'video', 'mkv': 'video', 'avi': 'video', 'mov': 'video', 'wmv': 'video', 
+        'flv': 'video', 'webm': 'video', 'm4v': 'video', '3gp': 'video',
+        # Audio
+        'mp3': 'audio', 'wav': 'audio', 'flac': 'audio', 'aac': 'audio', 'ogg': 'audio', 
+        'wma': 'audio', 'm4a': 'audio',
+        # Image
+        'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image', 'bmp': 'image', 
+        'svg': 'image', 'webp': 'image', 'ico': 'image', 'tiff': 'image',
+        # Archive
+        'zip': 'zip', 'rar': 'zip', '7z': 'zip', 'tar': 'zip', 'gz': 'zip', 'bz2': 'zip',
+        # Code
+        'py': 'code', 'js': 'code', 'html': 'code', 'css': 'code', 'java': 'code', 
+        'cpp': 'code', 'c': 'code', 'h': 'code', 'json': 'code', 'xml': 'code', 
+        'php': 'code', 'rb': 'code', 'go': 'code', 'rs': 'code', 'ts': 'code',
+        # Documents
+        'doc': 'document', 'docx': 'document', 'xls': 'document', 'xlsx': 'document', 
+        'ppt': 'document', 'pptx': 'document', 'txt': 'document', 'rtf': 'document', 
+        'odt': 'document', 'ods': 'document', 'odp': 'document',
+    }
+    
+    icon_type = ext_map.get(ext, 'default')
+    return icons.get(icon_type, icons['default'])
+
+@app.route("/file_arranged")
+@login_required
+def file_arranged():
+    """Grid view file browser like Windows Explorer"""
+    update_user_activity()
+    
+    file_list = [f for f in os.listdir(UPLOAD_FOLDER) if not f.startswith('.')]
+    
+    # Load metadata for all files
+    files_metadata = {}
+    for filename in file_list:
+        files_metadata[filename] = load_file_metadata(filename)
+    
+    is_controller = session.get('role') == 'server'
+    
+    return render_template(
+        "file_arranged.html", 
+        files=file_list,
+        files_metadata=files_metadata,
+        get_file_icon=get_file_icon,
+        is_controller=is_controller
+    )
+
+@app.route("/api/files")
+@login_required
+def api_files():
+    """JSON API: return current file list with metadata and icons for live refresh"""
+    file_list = [f for f in os.listdir(UPLOAD_FOLDER) if not f.startswith('.')]
+    
+    files_data = {}
+    for filename in file_list:
+        meta = load_file_metadata(filename)
+        files_data[filename] = {
+            'metadata': meta,
+            'icon_svg': get_file_icon(filename)
+        }
+    
+    return jsonify({'files': files_data})
 
 @app.route("/check_username")
 @login_required
@@ -485,7 +808,6 @@ def upload_chunk():
             return jsonify({'success': False, 'error': 'Chunk save failed'}), 500
         
         chunk_size = os.path.getsize(temp_chunk_path)
-        print(f"✓ Chunk {chunk_index}/{total_chunks} saved ({chunk_size} bytes)")
         
         # Track progress
         with transfer_lock:
@@ -503,8 +825,6 @@ def upload_chunk():
             active_transfers[transfer_id]['chunk_sizes'][chunk_index] = chunk_size
             active_transfers[transfer_id]['total_bytes'] += chunk_size
             received = len(active_transfers[transfer_id]['received_chunks'])
-            
-            print(f"Progress: {received}/{total_chunks} chunks received")
             
             # Check if complete
             if received == total_chunks:
@@ -529,15 +849,12 @@ def upload_chunk():
                             with open(chunk_path, 'rb') as infile:
                                 chunk_data = infile.read()
                                 outfile.write(chunk_data)
-                                print(f"  Wrote chunk {i}: {len(chunk_data)} bytes")
                             
                             os.remove(chunk_path)
                     
                     # Verify file size
                     final_size = os.path.getsize(final_path)
                     expected_size = sum(active_transfers[transfer_id]['chunk_sizes'].values())
-                    
-                    print(f"File assembled: {final_size} bytes (expected: {expected_size} bytes)")
                     
                     if final_size != expected_size:
                         print(f"WARNING: Size mismatch! Got {final_size}, expected {expected_size}")
@@ -682,6 +999,332 @@ def upload_progress():
             time.sleep(0.5)
     
     return Response(generate(), mimetype='text/event-stream')
+
+# ============ FOLDER UPLOAD ENDPOINTS (Server-side ZIP for large folders up to 50GB) ============
+
+@app.route("/upload_folder_start", methods=["POST"])
+@login_required
+def upload_folder_start():
+    """Initialize a folder upload session"""
+    if not is_username_set():
+        return jsonify({'success': False, 'error': 'Please set your username first'}), 400
+    
+    try:
+        data = request.json
+        folder_name = secure_filename(data.get('folderName', 'folder'))
+        total_files = data.get('totalFiles', 0)
+        total_size = data.get('totalSize', 0)
+        
+        # Generate unique folder upload ID
+        folder_id = str(uuid.uuid4())
+        
+        # Create temp directory for this folder upload
+        folder_temp_path = os.path.join(TEMP_FOLDER, f"folder_{folder_id}")
+        os.makedirs(folder_temp_path, exist_ok=True)
+        
+        with folder_uploads_lock:
+            folder_uploads[folder_id] = {
+                'folder_name': folder_name,
+                'temp_path': folder_temp_path,
+                'total_files': total_files,
+                'total_size': total_size,
+                'received_files': 0,
+                'received_bytes': 0,
+                'start_time': time.time(),
+                'username': get_username()
+            }
+        
+        print(f"Folder upload started: {folder_name} ({total_files} files, {total_size / (1024*1024):.2f} MB)")
+        return jsonify({'success': True, 'folderId': folder_id})
+    
+    except Exception as e:
+        print(f"Folder start error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/upload_folder_file", methods=["POST"])
+@login_required
+def upload_folder_file():
+    """Upload a single file from a folder"""
+    if not is_username_set():
+        return jsonify({'success': False, 'error': 'Please set your username first'}), 400
+    
+    try:
+        folder_id = request.form.get('folderId')
+        relative_path = request.form.get('relativePath', '')
+        file_chunk = request.files.get('chunk')
+        chunk_index = int(request.form.get('chunkIndex', 0))
+        total_chunks = int(request.form.get('totalChunks', 1))
+        
+        if not folder_id or folder_id not in folder_uploads:
+            return jsonify({'success': False, 'error': 'Invalid folder upload session'}), 400
+        
+        with folder_uploads_lock:
+            folder_info = folder_uploads[folder_id]
+            folder_temp_path = folder_info['temp_path']
+        
+        # Sanitize the relative path to prevent directory traversal
+        # Keep the folder structure but make safe
+        path_parts = relative_path.replace('\\', '/').split('/')
+        safe_parts = [secure_filename(part) for part in path_parts if part and part != '..' and part != '.']
+        safe_relative_path = os.path.join(*safe_parts) if safe_parts else 'file'
+        
+        # Create directory structure
+        file_dir = os.path.join(folder_temp_path, os.path.dirname(safe_relative_path))
+        if file_dir and file_dir != folder_temp_path:
+            os.makedirs(file_dir, exist_ok=True)
+        
+        file_path = os.path.join(folder_temp_path, safe_relative_path)
+        
+        # Handle chunked file upload
+        if total_chunks > 1:
+            # Multi-chunk file
+            chunk_path = f"{file_path}.chunk_{chunk_index}"
+            file_chunk.save(chunk_path)
+            
+            # Check if all chunks received for this file
+            all_chunks_received = True
+            for i in range(total_chunks):
+                if not os.path.exists(f"{file_path}.chunk_{i}"):
+                    all_chunks_received = False
+                    break
+            
+            if all_chunks_received:
+                # Assemble the file from chunks
+                with open(file_path, 'wb') as outfile:
+                    for i in range(total_chunks):
+                        chunk_file = f"{file_path}.chunk_{i}"
+                        with open(chunk_file, 'rb') as infile:
+                            outfile.write(infile.read())
+                        os.remove(chunk_file)
+                
+                # Update received files count
+                with folder_uploads_lock:
+                    folder_uploads[folder_id]['received_files'] += 1
+                    folder_uploads[folder_id]['received_bytes'] += os.path.getsize(file_path)
+        else:
+            # Single chunk file
+            file_chunk.save(file_path)
+            
+            with folder_uploads_lock:
+                folder_uploads[folder_id]['received_files'] += 1
+                folder_uploads[folder_id]['received_bytes'] += os.path.getsize(file_path)
+        
+        return jsonify({'success': True})
+    
+    except Exception as e:
+        print(f"Folder file upload error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/upload_folder_finalize", methods=["POST"])
+@login_required
+def upload_folder_finalize():
+    """Finalize folder upload - create ZIP on server asynchronously"""
+    if not is_username_set():
+        return jsonify({'success': False, 'error': 'Please set your username first'}), 400
+    
+    try:
+        data = request.json
+        folder_id = data.get('folderId')
+        
+        if not folder_id or folder_id not in folder_uploads:
+            return jsonify({'success': False, 'error': 'Invalid folder upload session'}), 400
+        
+        with folder_uploads_lock:
+            folder_info = folder_uploads[folder_id]
+            folder_name = folder_info['folder_name']
+            folder_temp_path = folder_info['temp_path']
+            username = folder_info['username']
+            start_time = folder_info['start_time']
+        
+        zip_filename = f"{folder_name}.zip"
+        zip_path = os.path.join(UPLOAD_FOLDER, zip_filename)
+        
+        # Handle duplicate filenames
+        counter = 1
+        while os.path.exists(zip_path):
+            zip_filename = f"{folder_name}_{counter}.zip"
+            zip_path = os.path.join(UPLOAD_FOLDER, zip_filename)
+            counter += 1
+        
+        # Mark as assembling
+        with assembling_lock:
+            assembling_files.add(zip_filename)
+        
+        # Initialize finalize status
+        with folder_finalize_lock:
+            folder_finalize_status[folder_id] = {
+                'status': 'processing',
+                'progress': 0,
+                'filename': zip_filename,
+                'error': None
+            }
+        
+        print(f"Creating ZIP (async): {zip_filename}")
+        
+        # Run ZIP creation in background thread
+        def create_zip_background():
+            try:
+                total_size = 0
+                file_count = 0
+                
+                # First count total files for progress tracking
+                total_files_to_zip = 0
+                for root, dirs, files_in_dir in os.walk(folder_temp_path):
+                    total_files_to_zip += len(files_in_dir)
+                
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True, compresslevel=9) as zipf:
+                    for root, dirs, files_in_dir in os.walk(folder_temp_path):
+                        for file in files_in_dir:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, folder_temp_path)
+                            zipf.write(file_path, arcname)
+                            total_size += os.path.getsize(file_path)
+                            file_count += 1
+                            
+                            # Update progress
+                            if total_files_to_zip > 0:
+                                with folder_finalize_lock:
+                                    folder_finalize_status[folder_id]['progress'] = int((file_count / total_files_to_zip) * 100)
+                
+                # Clean up temp folder
+                shutil.rmtree(folder_temp_path, ignore_errors=True)
+                
+                # Get final zip size
+                final_size = os.path.getsize(zip_path)
+                elapsed = time.time() - start_time
+                speed_mbps = (total_size / elapsed) / (1024 * 1024) if elapsed > 0 else 0
+                
+                print(f"✓✓✓ Folder ZIP complete: {zip_filename} ({file_count} files, {final_size / (1024*1024):.2f} MB in {elapsed:.2f}s)")
+                
+                # Save metadata
+                metadata = {
+                    'filename': zip_filename,
+                    'uploaded_by': username,
+                    'upload_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'file_size': final_size,
+                    'downloads': [],
+                    'is_folder': True,
+                    'original_folder': folder_name,
+                    'file_count': file_count
+                }
+                save_file_metadata(zip_filename, metadata)
+                
+                # Remove from assembling
+                with assembling_lock:
+                    if zip_filename in assembling_files:
+                        assembling_files.remove(zip_filename)
+                
+                # Clean up folder upload tracking
+                with folder_uploads_lock:
+                    if folder_id in folder_uploads:
+                        del folder_uploads[folder_id]
+                
+                # Add chat message
+                add_chat_message('System', f'{username} uploaded folder {folder_name}/ ({file_count} files, {final_size / (1024*1024):.2f} MB)', 'system')
+                
+                # Update finalize status
+                with folder_finalize_lock:
+                    folder_finalize_status[folder_id] = {
+                        'status': 'complete',
+                        'progress': 100,
+                        'filename': zip_filename,
+                        'size': final_size,
+                        'fileCount': file_count,
+                        'speed': round(speed_mbps, 2),
+                        'error': None
+                    }
+                    
+            except Exception as e:
+                print(f"ZIP creation error: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Clean up on error
+                with assembling_lock:
+                    if zip_filename in assembling_files:
+                        assembling_files.remove(zip_filename)
+                
+                if os.path.exists(zip_path):
+                    try:
+                        os.remove(zip_path)
+                    except:
+                        pass
+                
+                shutil.rmtree(folder_temp_path, ignore_errors=True)
+                
+                with folder_uploads_lock:
+                    if folder_id in folder_uploads:
+                        del folder_uploads[folder_id]
+                
+                with folder_finalize_lock:
+                    folder_finalize_status[folder_id] = {
+                        'status': 'error',
+                        'progress': 0,
+                        'filename': zip_filename,
+                        'error': str(e)
+                    }
+        
+        # Start background ZIP creation
+        threading.Thread(target=create_zip_background, daemon=True).start()
+        
+        # Return immediately - client will poll for status
+        return jsonify({
+            'success': True,
+            'async': True,
+            'folderId': folder_id,
+            'message': 'ZIP creation started in background'
+        })
+    
+    except Exception as e:
+        print(f"Folder finalize error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/upload_folder_finalize_status/<folder_id>")
+@login_required
+def upload_folder_finalize_status(folder_id):
+    """Poll the status of async ZIP creation"""
+    with folder_finalize_lock:
+        if folder_id not in folder_finalize_status:
+            return jsonify({'status': 'unknown', 'error': 'Invalid folder ID'}), 404
+        
+        status = folder_finalize_status[folder_id].copy()
+        
+        # Clean up completed/failed entries after returning them
+        if status['status'] in ('complete', 'error'):
+            # Keep for a bit so client can poll again if needed
+            pass
+    
+    return jsonify(status)
+
+
+@app.route("/folder_upload_progress/<folder_id>")
+@login_required
+def folder_upload_progress(folder_id):
+    """Get progress of a folder upload"""
+    with folder_uploads_lock:
+        if folder_id not in folder_uploads:
+            return jsonify({'error': 'Invalid folder ID'}), 404
+        
+        info = folder_uploads[folder_id]
+        elapsed = time.time() - info['start_time']
+        speed = (info['received_bytes'] / elapsed) / (1024 * 1024) if elapsed > 0 else 0
+        
+        return jsonify({
+            'receivedFiles': info['received_files'],
+            'totalFiles': info['total_files'],
+            'receivedBytes': info['received_bytes'],
+            'totalBytes': info['total_size'],
+            'speed': round(speed, 2)
+        })
+
+# ============ END FOLDER UPLOAD ENDPOINTS ============
 
 @app.route("/upload_parallel", methods=["POST"])
 @login_required
@@ -936,6 +1579,12 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 atexit.register(exit_handler)
 
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    """Handle file too large error"""
+    return jsonify({'success': False, 'error': 'Request too large. Please use chunked upload for large files.'}), 413
+
+
 if __name__ == "__main__":
     if HOTSPOT_SSID == "Priyank_" or HOTSPOT_PASSWORD == "12345678":
         print("="*50)
@@ -960,7 +1609,7 @@ if __name__ == "__main__":
         print(f"   • {CHUNK_SIZE / (1024*1024):.0f}MB chunks per stream")
         print(f"   • Range request support for parallel downloads")
         print(f"   • Real-time speed monitoring")
-        print(f"   • Up to 10GB file support")
+        print(f"   • No file size limit (chunked uploads)")
         print(f"   • 💬 Real-time chat between users")
         print(f"   • 🔐 Authentication required for all routes")
         print(f"   • 📊 Upload/Download tracking with metadata")
@@ -975,8 +1624,8 @@ if __name__ == "__main__":
         print(f"")
         print(f"📱 Access from mobile devices:")
         print(f"   1. Connect to hotspot: {HOTSPOT_SSID}")
-        print(f"   2. Open: http://{HOTSPOT_IP}:{PORT}/files")
-        print(f"   3. Login with admin credentials")
+        print(f"   2. Open: http://{HOTSPOT_IP}:{PORT}/join")
+        print(f"   3. Enter name and wait for dashboard approval")
         print(f"")
         
         app.run(host="0.0.0.0", port=PORT, threaded=True)

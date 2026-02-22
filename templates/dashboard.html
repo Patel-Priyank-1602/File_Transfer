@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PC Dashboard - Parallel Transfer Server</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
@@ -169,6 +170,43 @@
             border-bottom: 1px solid #eee;
         }
 
+        .upload-mode-toggle {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+            gap: 0;
+            background: #f0f0f0;
+            border-radius: 8px;
+            padding: 4px;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .upload-mode-btn {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s ease;
+            border-radius: 6px;
+        }
+
+        .upload-mode-btn.active {
+            background: #000;
+            color: white;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .upload-mode-btn:hover:not(.active) {
+            background: #e0e0e0;
+        }
+
         .file-input-wrapper {
             position: relative;
             margin-bottom: 20px;
@@ -331,6 +369,27 @@
 
         .refresh-btn:hover {
             background: #f0f0f0;
+            transform: translateY(-1px);
+        }
+
+        .history-btn {
+            padding: 6px 16px;
+            border: 1px solid #000;
+            background: #000;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .history-btn:hover {
+            background: #333;
             transform: translateY(-1px);
         }
 
@@ -1381,6 +1440,60 @@
             }
         }
 
+        /* History Modal */
+        .history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-info {
+            flex: 1;
+        }
+
+        .history-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .history-details {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        .history-status {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .status-accepted {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status-rejected {
+            background: #ffebee;
+            color: #c62828;
+        }
+
         @media (max-width: 480px) {
             body {
                 padding: 10px;
@@ -1409,6 +1522,173 @@
                 width: auto;
                 height: 500px;
             }
+        }
+
+        /* ===== Join Requests Panel ===== */
+        .join-requests-panel {
+            margin-bottom: 20px;
+            border: 2px solid #000;
+            border-radius: 10px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .join-requests-panel.has-requests {
+            border-color: #ff9800;
+            box-shadow: 0 0 15px rgba(255, 152, 0, 0.15);
+            animation: glowPulse 2s infinite;
+        }
+
+        @keyframes glowPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 10px rgba(255, 152, 0, 0.1);
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(255, 152, 0, 0.25);
+            }
+        }
+
+        .join-requests-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: #000;
+            color: white;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .join-requests-header .badge {
+            background: #ff9800;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            min-width: 24px;
+            text-align: center;
+            animation: badgePop 0.3s ease;
+        }
+
+        @keyframes badgePop {
+            from {
+                transform: scale(0.5);
+            }
+
+            to {
+                transform: scale(1);
+            }
+        }
+
+        .join-requests-body {
+            padding: 0;
+        }
+
+        .join-request-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            gap: 12px;
+            animation: slideInReq 0.3s ease;
+        }
+
+        .join-request-item:last-child {
+            border-bottom: none;
+        }
+
+        @keyframes slideInReq {
+            from {
+                opacity: 0;
+                transform: translateX(-15px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .join-request-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+            flex-shrink: 0;
+            text-transform: uppercase;
+        }
+
+        .join-request-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .join-request-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .join-request-detail {
+            font-size: 0.78rem;
+            color: #999;
+            margin-top: 2px;
+        }
+
+        .join-request-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .join-approve-btn,
+        .join-reject-btn {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            transition: all 0.2s ease;
+        }
+
+        .join-approve-btn {
+            background: #2ecc71;
+            color: white;
+        }
+
+        .join-approve-btn:hover {
+            background: #27ae60;
+            transform: translateY(-1px);
+        }
+
+        .join-reject-btn {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .join-reject-btn:hover {
+            background: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        .join-no-requests {
+            padding: 20px;
+            text-align: center;
+            color: #bbb;
+            font-size: 0.9rem;
+            font-style: italic;
         }
     </style>
 </head>
@@ -1447,14 +1727,30 @@
                 </div>
             </div>
 
+            <!-- Join Requests Panel -->
+            <div class="join-requests-panel" id="joinRequestsPanel">
+                <div class="join-requests-header">
+                    <span>Join Requests</span>
+                    <span class="badge" id="joinRequestsBadge" style="display: none;">0</span>
+                </div>
+                <div class="join-requests-body" id="joinRequestsBody">
+                    <div class="join-no-requests">No pending requests</div>
+                </div>
+            </div>
+
             <h2>File Management</h2>
 
             <form class="upload-form" id="uploadForm" action="/upload_parallel" method="post"
                 enctype="multipart/form-data">
+                <div class="upload-mode-toggle">
+                    <button type="button" class="upload-mode-btn active" id="fileModeBtn">File</button>
+                    <button type="button" class="upload-mode-btn" id="folderModeBtn">Folder</button>
+                </div>
                 <div class="file-input-wrapper">
-                    <input type="file" name="file" id="file-input" required>
-                    <label for="file-input" class="file-input-label">
-                        <span>Click to select a file</span>
+                    <input type="file" name="file" id="file-input">
+                    <input type="file" name="folder" id="folder-input" webkitdirectory directory multiple>
+                    <label class="file-input-label" id="upload-label">
+                        <span id="upload-label-text">Click to select a file</span>
                         <span id="file-name-display"></span>
                     </label>
                 </div>
@@ -1462,7 +1758,7 @@
                     Uploading as: <strong>{{ username }}</strong>
                 </div>
                 <div class="upload-action-row">
-                    <input type="submit" value="Upload File" class="upload-button">
+                    <input type="submit" value="Upload" class="upload-button" id="uploadButton">
 
                     <a href="https://lftdocs.netlify.app/" target="_blank" class="docs-outline-btn">
                         Documentation
@@ -1508,6 +1804,15 @@
                             </svg>
                             <span>Refresh</span>
                         </button>
+                        <a href="/file_arranged" class="refresh-btn" style="text-decoration: none; color: inherit;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2" width="20" height="20"
+                                style="vertical-align: middle;">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                            </svg>
+                            <span>Open All</span>
+                        </a>
                     </div>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -1597,6 +1902,19 @@
             </div>
         </div>
 
+        <!-- History Modal -->
+        <div class="file-info-modal" id="historyModal">
+            <div class="file-info-modal-content">
+                <h3>Client Access History</h3>
+                <div id="historyListContainer">
+                    <ul class="history-list" id="historyList">
+                        <!-- History items will be populated here -->
+                    </ul>
+                </div>
+                <button class="close-modal-btn" onclick="closeHistoryModal()">Close</button>
+            </div>
+        </div>
+
         <!-- Username Edit Modal -->
         <div class="username-modal" id="usernameModal">
             <div class="username-modal-content">
@@ -1661,11 +1979,316 @@
             }
 
             const fileInput = document.getElementById('file-input');
+            const folderInput = document.getElementById('folder-input');
             const fileNameDisplay = document.getElementById('file-name-display');
             const uploadUsernameDisplay = document.getElementById('uploadUsernameDisplay');
             const usernameRequiredModal = document.getElementById('usernameRequiredModal');
             const usernameRequiredInput = document.getElementById('usernameRequiredInput');
             const usernameRequiredBtn = document.getElementById('usernameRequiredBtn');
+            const uploadLabel = document.getElementById('upload-label');
+            const uploadLabelText = document.getElementById('upload-label-text');
+            const fileModeBtn = document.getElementById('fileModeBtn');
+            const folderModeBtn = document.getElementById('folderModeBtn');
+            const uploadButton = document.getElementById('uploadButton');
+
+            // Upload mode: 'file' or 'folder'
+            let uploadMode = 'file';
+            let pendingFolderFiles = null;
+            let pendingFolderName = null;
+
+            // Initially hide folder input
+            folderInput.style.display = 'none';
+
+            // Toggle upload mode between file and folder
+            function setUploadMode(mode) {
+                uploadMode = mode;
+                fileNameDisplay.textContent = '';
+                pendingFolderFiles = null;
+                pendingFolderName = null;
+
+                if (mode === 'file') {
+                    fileModeBtn.classList.add('active');
+                    folderModeBtn.classList.remove('active');
+                    uploadLabelText.textContent = 'Click to select a file';
+                    uploadButton.value = 'Upload';
+                    fileInput.value = '';
+                    fileInput.style.display = '';
+                    folderInput.style.display = 'none';
+                } else {
+                    folderModeBtn.classList.add('active');
+                    fileModeBtn.classList.remove('active');
+                    uploadLabelText.textContent = 'Click to select a folder';
+                    uploadButton.value = 'Upload Folder';
+                    folderInput.value = '';
+                    folderInput.style.display = '';
+                    fileInput.style.display = 'none';
+                }
+
+                if (uploadUsernameDisplay) uploadUsernameDisplay.style.display = 'none';
+            }
+
+            // Add click listeners to toggle buttons
+            fileModeBtn.addEventListener('click', function () {
+                setUploadMode('file');
+            });
+
+            folderModeBtn.addEventListener('click', function () {
+                setUploadMode('folder');
+            });
+
+            // Handle label click to trigger correct input
+            uploadLabel.addEventListener('click', function (e) {
+                e.preventDefault();
+                if (uploadMode === 'folder') {
+                    folderInput.click();
+                } else {
+                    fileInput.click();
+                }
+            });
+
+            // Maximum folder size limit (5GB in bytes)
+            const MAX_FOLDER_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+            const MAX_FOLDER_SIZE_MB = 5120; // 5GB in MB
+            let folderSizeExceeded = false;
+
+            // Handle folder selection
+            if (folderInput) {
+                folderInput.addEventListener('change', function () {
+                    if (this.files.length > 0) {
+                        // Get folder name from the first file's path
+                        const firstFilePath = this.files[0].webkitRelativePath;
+                        const folderName = firstFilePath.split('/')[0];
+                        pendingFolderName = folderName;
+                        pendingFolderFiles = Array.from(this.files);
+
+                        const totalSize = pendingFolderFiles.reduce((sum, file) => sum + file.size, 0);
+                        const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+
+                        // Check if folder size exceeds the limit
+                        if (totalSize > MAX_FOLDER_SIZE) {
+                            folderSizeExceeded = true;
+                            fileNameDisplay.innerHTML = `<span style="color: #ff3b3b; font-weight: 600;">⚠️ Folder too large: ${folderName}/ (${sizeMB} MB)</span><br><span style="color: #ff3b3b; font-size: 0.85rem;">Maximum allowed size is ${MAX_FOLDER_SIZE_MB} MB (5 GB). Please select a smaller folder.</span>`;
+                            uploadButton.disabled = true;
+                            uploadButton.style.opacity = '0.5';
+                            uploadButton.style.cursor = 'not-allowed';
+                            if (uploadUsernameDisplay) uploadUsernameDisplay.style.display = 'none';
+                        } else {
+                            folderSizeExceeded = false;
+                            fileNameDisplay.textContent = `Selected: ${folderName}/ (${pendingFolderFiles.length} files, ${sizeMB} MB)`;
+                            uploadButton.disabled = false;
+                            uploadButton.style.opacity = '1';
+                            uploadButton.style.cursor = 'pointer';
+
+                            if (usernameSet && uploadUsernameDisplay) {
+                                uploadUsernameDisplay.style.display = 'block';
+                                uploadUsernameDisplay.innerHTML = `Uploading as: <strong>${currentUsernameValue}</strong>`;
+                            }
+                        }
+                    } else {
+                        fileNameDisplay.textContent = '';
+                        pendingFolderFiles = null;
+                        pendingFolderName = null;
+                        folderSizeExceeded = false;
+                        uploadButton.disabled = false;
+                        uploadButton.style.opacity = '1';
+                        uploadButton.style.cursor = 'pointer';
+                        if (uploadUsernameDisplay) uploadUsernameDisplay.style.display = 'none';
+                    }
+                });
+            }
+
+            // Upload folder to server (server-side ZIP for large folders - no size limit)
+            async function uploadFolderToServer(files, folderName) {
+                const progressFill = document.getElementById('progressFill');
+                const speedDisplay = document.getElementById('speedDisplay');
+
+                const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+                const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+
+                progressFill.style.width = '0%';
+                progressFill.textContent = '0%';
+                speedDisplay.textContent = `Preparing ${files.length} files (${totalSizeMB} MB)...`;
+
+                // Step 1: Start folder upload session
+                const startResponse = await fetch('/upload_folder_start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        folderName: folderName,
+                        totalFiles: files.length,
+                        totalSize: totalSize
+                    })
+                });
+
+                if (!startResponse.ok) {
+                    let error;
+                    try { error = await startResponse.json(); } catch (e) { error = { error: `HTTP ${startResponse.status}` }; }
+                    throw new Error(error.error || 'Failed to start folder upload');
+                }
+
+                const { folderId } = await startResponse.json();
+
+                // Step 2: Upload files in parallel with chunking for large files
+                const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+                const CONCURRENT_UPLOADS = 4; // Number of parallel file uploads
+
+                let uploadedFiles = 0;
+                let uploadedBytes = 0;
+                const startTime = Date.now();
+
+                // Upload a single file (with chunking for large files)
+                async function uploadFile(file) {
+                    const relativePath = file.webkitRelativePath;
+                    const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+
+                    if (file.size === 0) {
+                        // Handle empty files - send a single empty chunk
+                        const formData = new FormData();
+                        formData.append('folderId', folderId);
+                        formData.append('relativePath', relativePath);
+                        formData.append('chunk', new Blob([]), file.name);
+                        formData.append('chunkIndex', 0);
+                        formData.append('totalChunks', 1);
+
+                        let retries = 5;
+                        while (retries > 0) {
+                            try {
+                                const response = await fetch('/upload_folder_file', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                                const result = await response.json();
+                                if (!result.success) throw new Error(result.error || 'Upload failed');
+                                break;
+                            } catch (err) {
+                                retries--;
+                                if (retries === 0) throw err;
+                                await new Promise(r => setTimeout(r, 1000));
+                            }
+                        }
+                    } else {
+                        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                            const start = chunkIndex * CHUNK_SIZE;
+                            const end = Math.min(start + CHUNK_SIZE, file.size);
+                            const chunk = file.slice(start, end);
+
+                            const formData = new FormData();
+                            formData.append('folderId', folderId);
+                            formData.append('relativePath', relativePath);
+                            formData.append('chunk', chunk);
+                            formData.append('chunkIndex', chunkIndex);
+                            formData.append('totalChunks', totalChunks);
+
+                            let retries = 5;
+                            while (retries > 0) {
+                                try {
+                                    const response = await fetch('/upload_folder_file', {
+                                        method: 'POST',
+                                        body: formData
+                                    });
+
+                                    if (!response.ok) {
+                                        throw new Error(`HTTP ${response.status}`);
+                                    }
+
+                                    const result = await response.json();
+                                    if (!result.success) {
+                                        throw new Error(result.error || 'Upload failed');
+                                    }
+
+                                    uploadedBytes += chunk.size;
+                                    break; // Success
+                                } catch (err) {
+                                    retries--;
+                                    if (retries === 0) {
+                                        console.error(`Failed to upload ${file.name}:`, err);
+                                        throw err;
+                                    }
+                                    await new Promise(r => setTimeout(r, 1500 * (6 - retries))); // Exponential backoff
+                                }
+                            }
+                        }
+                    }
+
+                    uploadedFiles++;
+
+                    // Update progress
+                    const percent = Math.round((uploadedFiles / files.length) * 90); // 90% for upload, 10% for server zip
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const speed = elapsed > 0 ? uploadedBytes / elapsed / (1024 * 1024) : 0;
+
+                    progressFill.style.width = percent + '%';
+                    progressFill.textContent = `${percent}%`;
+                    speedDisplay.textContent = `Uploading: ${uploadedFiles}/${files.length} files | ${speed.toFixed(2)} MB/s`;
+                }
+
+                // Process files in batches for parallel upload
+                for (let i = 0; i < files.length; i += CONCURRENT_UPLOADS) {
+                    const batch = files.slice(i, i + CONCURRENT_UPLOADS);
+                    await Promise.all(batch.map(file => uploadFile(file)));
+                }
+
+                // Step 3: Finalize - server creates ZIP asynchronously
+                progressFill.style.width = '92%';
+                progressFill.textContent = '92%';
+                speedDisplay.textContent = 'Creating ZIP on server...';
+
+                const finalizeResponse = await fetch('/upload_folder_finalize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderId: folderId })
+                });
+
+                if (!finalizeResponse.ok) {
+                    let error;
+                    try { error = await finalizeResponse.json(); } catch (e) { error = { error: `HTTP ${finalizeResponse.status}` }; }
+                    throw new Error(error.error || 'Failed to create ZIP');
+                }
+
+                const finalizeResult = await finalizeResponse.json();
+
+                // If async, poll for completion
+                if (finalizeResult.async) {
+                    let result = null;
+                    while (true) {
+                        await new Promise(r => setTimeout(r, 2000)); // Poll every 2 seconds
+
+                        try {
+                            const statusResponse = await fetch(`/upload_folder_finalize_status/${folderId}`);
+                            const status = await statusResponse.json();
+
+                            if (status.status === 'complete') {
+                                result = status;
+                                break;
+                            } else if (status.status === 'error') {
+                                throw new Error(status.error || 'ZIP creation failed on server');
+                            } else {
+                                // Still processing - update progress
+                                const zipProgress = 90 + Math.round((status.progress || 0) / 100 * 10);
+                                progressFill.style.width = zipProgress + '%';
+                                progressFill.textContent = `${zipProgress}%`;
+                                speedDisplay.textContent = `Creating ZIP on server... ${status.progress || 0}%`;
+                            }
+                        } catch (pollErr) {
+                            if (pollErr.message.includes('ZIP creation failed')) throw pollErr;
+                            // Network error during poll - retry
+                            console.warn('Poll error, retrying...', pollErr);
+                        }
+                    }
+
+                    progressFill.style.width = '100%';
+                    progressFill.textContent = 'Complete! ✓';
+                    speedDisplay.textContent = `Uploaded ${result.fileCount} files (${(result.size / (1024 * 1024)).toFixed(2)} MB) at ${result.speed} MB/s`;
+                    return result;
+                } else {
+                    // Synchronous response (backward compat)
+                    progressFill.style.width = '100%';
+                    progressFill.textContent = 'Complete! ✓';
+                    speedDisplay.textContent = `Uploaded ${finalizeResult.fileCount} files (${(finalizeResult.size / (1024 * 1024)).toFixed(2)} MB) at ${finalizeResult.speed} MB/s`;
+                    return finalizeResult;
+                }
+            }
 
             // Check if username is set on page load - get from data attribute
             var usernameSet = document.body.getAttribute('data-username-set') === 'true';
@@ -1680,6 +2303,7 @@
 
                 // Disable file operations until username is set
                 if (fileInput) fileInput.disabled = true;
+                if (folderInput) folderInput.disabled = true;
                 const uploadBtn = document.querySelector('.upload-button');
                 if (uploadBtn) uploadBtn.disabled = true;
 
@@ -1912,12 +2536,56 @@
                 document.getElementById('fileInfoModal').classList.remove('active');
             }
 
-            // Parallel upload
-            document.getElementById('uploadForm').addEventListener('submit', function (e) {
+            // Parallel upload - handles both file and folder uploads
+            document.getElementById('uploadForm').addEventListener('submit', async function (e) {
                 e.preventDefault();
 
-                const file = fileInput.files[0];
+                // Check upload mode
+                if (uploadMode === 'folder') {
+                    // Folder upload - upload files directly to server for server-side ZIP
+                    if (!pendingFolderFiles || pendingFolderFiles.length === 0) {
+                        alert('Please select a folder first');
+                        return;
+                    }
+
+                    // Double-check folder size limit
+                    if (folderSizeExceeded) {
+                        const totalSize = pendingFolderFiles.reduce((sum, file) => sum + file.size, 0);
+                        const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+                        alert(`Folder size (${sizeMB} MB) exceeds the maximum allowed size of ${MAX_FOLDER_SIZE_MB} MB (5 GB).\n\nPlease select a smaller folder to upload.`);
+                        return;
+                    }
+
+                    const progressContainer = document.getElementById('progressContainer');
+                    const progressFill = document.getElementById('progressFill');
+                    const speedDisplay = document.getElementById('speedDisplay');
+
+                    progressContainer.style.display = 'block';
+                    uploadButton.disabled = true;
+                    uploadButton.value = 'Uploading...';
+
+                    try {
+                        // Upload folder to server (server creates ZIP)
+                        await uploadFolderToServer(pendingFolderFiles, pendingFolderName);
+
+                        // Success - reload page
+                        setTimeout(() => window.location.reload(), 1500);
+                    } catch (error) {
+                        console.error('Error uploading folder:', error);
+                        alert('Error uploading folder: ' + error.message);
+                        progressContainer.style.display = 'none';
+                        uploadButton.disabled = false;
+                        uploadButton.value = 'Upload Folder';
+                    }
+                    return; // Exit early for folder upload
+                }
+
+                // Regular file upload
+                let file = fileInput.files[0];
                 if (!file) return;
+
+                uploadButton.disabled = true;
+                uploadButton.value = 'Uploading...';
 
                 const progressContainer = document.getElementById('progressContainer');
                 const progressFill = document.getElementById('progressFill');
@@ -2438,6 +3106,173 @@
                 setInterval(loadOnlineUsers, 5000);
                 loadOnlineUsers();
             }
+
+            // ===== JOIN REQUESTS SYSTEM =====
+            const joinRequestsPanel = document.getElementById('joinRequestsPanel');
+            const joinRequestsBody = document.getElementById('joinRequestsBody');
+            const joinRequestsBadge = document.getElementById('joinRequestsBadge');
+            let previousPendingCount = 0;
+
+            // Audio notification (simple beep using Web Audio)
+            function playNotificationSound() {
+                try {
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+                    oscillator.frequency.value = 800;
+                    oscillator.type = 'sine';
+                    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                    oscillator.start(audioCtx.currentTime);
+                    oscillator.stop(audioCtx.currentTime + 0.5);
+                } catch (e) { /* ignore audio errors */ }
+            }
+
+            function respondToJoinRequest(clientId, action, buttonEl) {
+                // Disable buttons in the row
+                const row = buttonEl.closest('.join-request-item');
+                const btns = row.querySelectorAll('button');
+                btns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+
+                fetch('/join/respond', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: clientId, action: action })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Animate removal
+                            row.style.transition = 'all 0.3s ease';
+                            row.style.opacity = '0';
+                            row.style.transform = 'translateX(30px)';
+                            setTimeout(() => {
+                                row.remove();
+                                // Check if empty
+                                if (joinRequestsBody.querySelectorAll('.join-request-item').length === 0) {
+                                    joinRequestsBody.innerHTML = '<div class="join-no-requests">No pending requests</div>';
+                                    joinRequestsPanel.classList.remove('has-requests');
+                                    joinRequestsBadge.style.display = 'none';
+                                }
+                            }, 300);
+                        } else {
+                            alert(data.error || 'Failed to respond');
+                            btns.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error responding to join request:', err);
+                        btns.forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+                    });
+            }
+
+            function loadJoinRequests() {
+                fetch('/join/pending')
+                    .then(res => res.json())
+                    .then(data => {
+                        const pending = data.pending || [];
+
+                        // Play notification if new requests arrived
+                        if (pending.length > previousPendingCount && previousPendingCount >= 0) {
+                            playNotificationSound();
+                        }
+                        previousPendingCount = pending.length;
+
+                        if (pending.length === 0) {
+                            joinRequestsBody.innerHTML = '<div class="join-no-requests">No pending requests</div>';
+                            joinRequestsPanel.classList.remove('has-requests');
+                            joinRequestsBadge.style.display = 'none';
+                            return;
+                        }
+
+                        joinRequestsPanel.classList.add('has-requests');
+                        joinRequestsBadge.style.display = 'inline-block';
+                        joinRequestsBadge.textContent = pending.length;
+
+                        let html = '';
+                        pending.forEach(req => {
+                            const initial = req.name.charAt(0).toUpperCase();
+                            html += `
+                                <div class="join-request-item" data-client-id="${req.client_id}">
+                                    <div class="join-request-avatar">${escapeHtml(initial)}</div>
+                                    <div class="join-request-info">
+                                        <div class="join-request-name">${escapeHtml(req.name)} <span style="color:#888; font-weight:400; font-size:0.85rem;">wants to join</span></div>
+                                        <div class="join-request-detail">IP: ${req.ip} · ${req.timestamp}</div>
+                                    </div>
+                                    <div class="join-request-actions">
+                                        <button class="join-approve-btn" onclick="respondToJoinRequest('${req.client_id}', 'approve', this)">Approve</button>
+                                        <button class="join-reject-btn" onclick="respondToJoinRequest('${req.client_id}', 'reject', this)">Reject</button>
+                                    </div>
+                                </div>
+                            `;
+                        });
+
+                        joinRequestsBody.innerHTML = html;
+                    })
+                    .catch(err => {
+                        console.error('Error loading join requests:', err);
+                    });
+            }
+
+            // Poll join requests every 3 seconds
+            setInterval(loadJoinRequests, 3000);
+            loadJoinRequests();
+
+            // History Modal Functions
+            const historyModal = document.getElementById('historyModal');
+            const historyList = document.getElementById('historyList');
+
+            function openHistoryModal() {
+                historyModal.classList.add('active');
+                document.body.classList.add('modal-open');
+                loadHistory();
+            }
+
+            function closeHistoryModal() {
+                historyModal.classList.remove('active');
+                document.body.classList.remove('modal-open');
+            }
+
+            function loadHistory() {
+                historyList.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">Loading...</div>';
+
+                fetch('/api/history')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.length === 0) {
+                            historyList.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No history yet</div>';
+                            return;
+                        }
+
+                        let html = '';
+                        data.forEach(item => {
+                            const statusClass = item.action === 'Accepted' ? 'status-accepted' : 'status-rejected';
+                            html += `
+                                <li class="history-item">
+                                    <div class="history-info">
+                                        <div class="history-name">${escapeHtml(item.name)}</div>
+                                        <div class="history-details">${item.timestamp} · IP: ${item.ip}</div>
+                                    </div>
+                                    <div class="history-status ${statusClass}">${item.action}</div>
+                                </li>
+                            `;
+                        });
+                        historyList.innerHTML = html;
+                    })
+                    .catch(err => {
+                        console.error('Error loading history:', err);
+                        historyList.innerHTML = '<div style="padding:20px; text-align:center; color:#red;">Error loading history</div>';
+                    });
+            }
+
+            // Close history modal on outside click
+            historyModal.addEventListener('click', function (e) {
+                if (e.target === historyModal) {
+                    closeHistoryModal();
+                }
+            });
         </script>
 </body>
 

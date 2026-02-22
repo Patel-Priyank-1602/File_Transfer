@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>File Server - Parallel Transfer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
@@ -73,6 +74,45 @@
             margin-bottom: 40px;
             padding-bottom: 30px;
             border-bottom: 1px solid var(--border-color);
+        }
+
+        .upload-mode-toggle {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+            gap: 0;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 4px;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .upload-mode-btn {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+            border-radius: var(--radius-sm);
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        .upload-mode-btn.active {
+            background: var(--primary-color);
+            color: white;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .upload-mode-btn:hover:not(.active) {
+            background: var(--border-color);
         }
 
         .file-input-wrapper {
@@ -1577,10 +1617,15 @@
         <h2>File Management</h2>
 
         <form class="upload-form" id="uploadForm" action="/upload_parallel" method="post" enctype="multipart/form-data">
+            <div class="upload-mode-toggle">
+                <button type="button" class="upload-mode-btn active" id="fileModeBtn">File</button>
+                <button type="button" class="upload-mode-btn" id="folderModeBtn">Folder</button>
+            </div>
             <div class="file-input-wrapper">
-                <input type="file" name="file" id="file-input" required>
-                <label for="file-input" class="file-input-label">
-                    <span>Click to select a file</span>
+                <input type="file" name="file" id="file-input">
+                <input type="file" name="folder" id="folder-input" webkitdirectory directory multiple>
+                <label class="file-input-label" id="upload-label">
+                    <span id="upload-label-text">Click to select a file</span>
                     <span id="file-name-display"></span>
                 </label>
             </div>
@@ -1588,7 +1633,7 @@
                 Uploading as: <strong>{{ username }}</strong>
             </div>
             <div class="upload-action-row">
-                <input type="submit" value="Upload File" class="upload-button" id="uploadButton">
+                <input type="submit" value="Upload" class="upload-button" id="uploadButton">
 
                 <a href="https://lftdocs.netlify.app/" target="_blank" class="docs-dropdown-btn">
                     <span>Documentation</span>
@@ -1629,6 +1674,14 @@
                     </svg>
                     Refresh
                 </button>
+                <a href="/file_arranged" class="refresh-btn" title="Open Grid View" style="text-decoration: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                        stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    Open All
+                </a>
             </div>
             <div class="file-tools">
                 <input type="text" id="searchInput" placeholder="Search files...">
@@ -1742,13 +1795,317 @@
 
     <script>
         const fileInput = document.getElementById('file-input');
+        const folderInput = document.getElementById('folder-input');
         const fileNameDisplay = document.getElementById('file-name-display');
         const uploadButton = document.getElementById('uploadButton');
         const uploadUsernameDisplay = document.getElementById('uploadUsernameDisplay');
+        const uploadLabel = document.getElementById('upload-label');
+        const uploadLabelText = document.getElementById('upload-label-text');
+        const fileModeBtn = document.getElementById('fileModeBtn');
+        const folderModeBtn = document.getElementById('folderModeBtn');
+
+        // Upload mode: 'file' or 'folder'
+        let uploadMode = 'file';
+        let pendingFolderFiles = null;
+        let pendingFolderName = null;
 
         // Get username from data attribute (set from session)
         var usernameSet = document.body.getAttribute('data-username-set') === 'true';
         var currentUsernameValue = document.body.getAttribute('data-username') || '';
+
+        // Initially hide folder input
+        folderInput.style.display = 'none';
+
+        // Toggle upload mode between file and folder
+        function setUploadMode(mode) {
+            uploadMode = mode;
+            fileNameDisplay.textContent = '';
+            pendingFolderFiles = null;
+            pendingFolderName = null;
+
+            if (mode === 'file') {
+                fileModeBtn.classList.add('active');
+                folderModeBtn.classList.remove('active');
+                uploadLabelText.textContent = 'Click to select a file';
+                uploadButton.value = 'Upload';
+                fileInput.value = '';
+                fileInput.style.display = '';
+                folderInput.style.display = 'none';
+            } else {
+                folderModeBtn.classList.add('active');
+                fileModeBtn.classList.remove('active');
+                uploadLabelText.textContent = 'Click to select a folder';
+                uploadButton.value = 'Upload Folder';
+                folderInput.value = '';
+                folderInput.style.display = '';
+                fileInput.style.display = 'none';
+            }
+
+            if (uploadUsernameDisplay) uploadUsernameDisplay.style.display = 'none';
+        }
+
+        // Add click listeners to toggle buttons
+        fileModeBtn.addEventListener('click', function () {
+            setUploadMode('file');
+        });
+
+        folderModeBtn.addEventListener('click', function () {
+            setUploadMode('folder');
+        });
+
+        // Handle label click to trigger correct input
+        uploadLabel.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (uploadMode === 'folder') {
+                folderInput.click();
+            } else {
+                fileInput.click();
+            }
+        });
+
+        // Maximum folder size limit (5GB in bytes)
+        const MAX_FOLDER_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+        const MAX_FOLDER_SIZE_MB = 5120; // 5GB in MB
+        let folderSizeExceeded = false;
+
+        // Handle folder selection
+        if (folderInput) {
+            folderInput.addEventListener('change', function () {
+                if (this.files.length > 0) {
+                    // Get folder name from the first file's path
+                    const firstFilePath = this.files[0].webkitRelativePath;
+                    const folderName = firstFilePath.split('/')[0];
+                    pendingFolderName = folderName;
+                    pendingFolderFiles = Array.from(this.files);
+
+                    const totalSize = pendingFolderFiles.reduce((sum, file) => sum + file.size, 0);
+                    const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+
+                    // Check if folder size exceeds the limit
+                    if (totalSize > MAX_FOLDER_SIZE) {
+                        folderSizeExceeded = true;
+                        fileNameDisplay.innerHTML = `<span style="color: #ff3b3b; font-weight: 600;">⚠️ Folder too large: ${folderName}/ (${sizeMB} MB)</span><br><span style="color: #ff3b3b; font-size: 0.85rem;">Maximum allowed size is ${MAX_FOLDER_SIZE_MB} MB (5 GB). Please select a smaller folder.</span>`;
+                        uploadButton.disabled = true;
+                        uploadButton.style.opacity = '0.5';
+                        uploadButton.style.cursor = 'not-allowed';
+                        if (uploadUsernameDisplay) uploadUsernameDisplay.style.display = 'none';
+                    } else {
+                        folderSizeExceeded = false;
+                        fileNameDisplay.textContent = `Selected: ${folderName}/ (${pendingFolderFiles.length} files, ${sizeMB} MB)`;
+                        uploadButton.disabled = false;
+                        uploadButton.style.opacity = '1';
+                        uploadButton.style.cursor = 'pointer';
+
+                        if (usernameSet && uploadUsernameDisplay) {
+                            uploadUsernameDisplay.style.display = 'block';
+                            uploadUsernameDisplay.innerHTML = `Uploading as: <strong>${currentUsernameValue}</strong>`;
+                        }
+                    }
+                } else {
+                    fileNameDisplay.textContent = '';
+                    pendingFolderFiles = null;
+                    pendingFolderName = null;
+                    folderSizeExceeded = false;
+                    uploadButton.disabled = false;
+                    uploadButton.style.opacity = '1';
+                    uploadButton.style.cursor = 'pointer';
+                    if (uploadUsernameDisplay) uploadUsernameDisplay.style.display = 'none';
+                }
+            });
+        }
+
+        // Upload folder to server (server-side ZIP for large folders - no size limit)
+        async function uploadFolderToServer(files, folderName) {
+            const progressFill = document.getElementById('progressFill');
+            const speedDisplay = document.getElementById('speedDisplay');
+
+            const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+            const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+
+            progressFill.style.width = '0%';
+            progressFill.textContent = '0%';
+            speedDisplay.textContent = `Preparing ${files.length} files (${totalSizeMB} MB)...`;
+
+            // Step 1: Start folder upload session
+            const startResponse = await fetch('/upload_folder_start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    folderName: folderName,
+                    totalFiles: files.length,
+                    totalSize: totalSize
+                })
+            });
+
+            if (!startResponse.ok) {
+                let error;
+                try { error = await startResponse.json(); } catch (e) { error = { error: `HTTP ${startResponse.status}` }; }
+                throw new Error(error.error || 'Failed to start folder upload');
+            }
+
+            const { folderId } = await startResponse.json();
+
+            // Step 2: Upload files in parallel with chunking for large files
+            const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+            const CONCURRENT_UPLOADS = 4; // Number of parallel file uploads
+
+            let uploadedFiles = 0;
+            let uploadedBytes = 0;
+            const startTime = Date.now();
+
+            // Upload a single file (with chunking for large files)
+            async function uploadFile(file) {
+                const relativePath = file.webkitRelativePath;
+                const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+
+                if (file.size === 0) {
+                    // Handle empty files - send a single empty chunk
+                    const formData = new FormData();
+                    formData.append('folderId', folderId);
+                    formData.append('relativePath', relativePath);
+                    formData.append('chunk', new Blob([]), file.name);
+                    formData.append('chunkIndex', 0);
+                    formData.append('totalChunks', 1);
+
+                    let retries = 5;
+                    while (retries > 0) {
+                        try {
+                            const response = await fetch('/upload_folder_file', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                            const result = await response.json();
+                            if (!result.success) throw new Error(result.error || 'Upload failed');
+                            break;
+                        } catch (err) {
+                            retries--;
+                            if (retries === 0) throw err;
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
+                    }
+                } else {
+                    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                        const start = chunkIndex * CHUNK_SIZE;
+                        const end = Math.min(start + CHUNK_SIZE, file.size);
+                        const chunk = file.slice(start, end);
+
+                        const formData = new FormData();
+                        formData.append('folderId', folderId);
+                        formData.append('relativePath', relativePath);
+                        formData.append('chunk', chunk);
+                        formData.append('chunkIndex', chunkIndex);
+                        formData.append('totalChunks', totalChunks);
+
+                        let retries = 5;
+                        while (retries > 0) {
+                            try {
+                                const response = await fetch('/upload_folder_file', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+
+                                if (!response.ok) {
+                                    throw new Error(`HTTP ${response.status}`);
+                                }
+
+                                const result = await response.json();
+                                if (!result.success) {
+                                    throw new Error(result.error || 'Upload failed');
+                                }
+
+                                uploadedBytes += chunk.size;
+                                break; // Success
+                            } catch (err) {
+                                retries--;
+                                if (retries === 0) {
+                                    console.error(`Failed to upload ${file.name}:`, err);
+                                    throw err;
+                                }
+                                await new Promise(r => setTimeout(r, 1500 * (6 - retries))); // Exponential backoff
+                            }
+                        }
+                    }
+                }
+
+                uploadedFiles++;
+
+                // Update progress
+                const percent = Math.round((uploadedFiles / files.length) * 90); // 90% for upload, 10% for server zip
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = elapsed > 0 ? uploadedBytes / elapsed / (1024 * 1024) : 0;
+
+                progressFill.style.width = percent + '%';
+                progressFill.textContent = `${percent}%`;
+                speedDisplay.textContent = `Uploading: ${uploadedFiles}/${files.length} files | ${speed.toFixed(2)} MB/s`;
+            }
+
+            // Process files in batches for parallel upload
+            for (let i = 0; i < files.length; i += CONCURRENT_UPLOADS) {
+                const batch = files.slice(i, i + CONCURRENT_UPLOADS);
+                await Promise.all(batch.map(file => uploadFile(file)));
+            }
+
+            // Step 3: Finalize - server creates ZIP asynchronously
+            progressFill.style.width = '92%';
+            progressFill.textContent = '92%';
+            speedDisplay.textContent = 'Creating ZIP on server...';
+
+            const finalizeResponse = await fetch('/upload_folder_finalize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folderId: folderId })
+            });
+
+            if (!finalizeResponse.ok) {
+                let error;
+                try { error = await finalizeResponse.json(); } catch (e) { error = { error: `HTTP ${finalizeResponse.status}` }; }
+                throw new Error(error.error || 'Failed to create ZIP');
+            }
+
+            const finalizeResult = await finalizeResponse.json();
+
+            // If async, poll for completion
+            if (finalizeResult.async) {
+                let result = null;
+                while (true) {
+                    await new Promise(r => setTimeout(r, 2000)); // Poll every 2 seconds
+
+                    try {
+                        const statusResponse = await fetch(`/upload_folder_finalize_status/${folderId}`);
+                        const status = await statusResponse.json();
+
+                        if (status.status === 'complete') {
+                            result = status;
+                            break;
+                        } else if (status.status === 'error') {
+                            throw new Error(status.error || 'ZIP creation failed on server');
+                        } else {
+                            // Still processing - update progress
+                            const zipProgress = 90 + Math.round((status.progress || 0) / 100 * 10);
+                            progressFill.style.width = zipProgress + '%';
+                            progressFill.textContent = `${zipProgress}%`;
+                            speedDisplay.textContent = `Creating ZIP on server... ${status.progress || 0}%`;
+                        }
+                    } catch (pollErr) {
+                        if (pollErr.message.includes('ZIP creation failed')) throw pollErr;
+                        // Network error during poll - retry
+                        console.warn('Poll error, retrying...', pollErr);
+                    }
+                }
+
+                progressFill.style.width = '100%';
+                progressFill.textContent = 'Complete! ✓';
+                speedDisplay.textContent = `Uploaded ${result.fileCount} files (${(result.size / (1024 * 1024)).toFixed(2)} MB) at ${result.speed} MB/s`;
+                return result;
+            } else {
+                // Synchronous response (backward compat)
+                progressFill.style.width = '100%';
+                progressFill.textContent = 'Complete! ✓';
+                speedDisplay.textContent = `Uploaded ${finalizeResult.fileCount} files (${(finalizeResult.size / (1024 * 1024)).toFixed(2)} MB) at ${finalizeResult.speed} MB/s`;
+                return finalizeResult;
+            }
+        }
 
         // Show username in upload display if set
         if (usernameSet && currentUsernameValue && uploadUsernameDisplay) {
@@ -1768,7 +2125,13 @@
 
         function loadOnlineUsers() {
             fetch('/online_users')
-                .then(response => response.json())
+                .then(response => {
+                    if (response.redirected) {
+                        window.location.reload();
+                        return;
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     const users = data.users || [];
                     if (users.length === 0) {
@@ -1907,10 +2270,51 @@
             document.body.classList.remove('modal-open');
         }
 
-        document.getElementById('uploadForm').addEventListener('submit', function (e) {
+        document.getElementById('uploadForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
-            const file = fileInput.files[0];
+            // Check upload mode
+            if (uploadMode === 'folder') {
+                // Folder upload - upload files directly to server for server-side ZIP
+                if (!pendingFolderFiles || pendingFolderFiles.length === 0) {
+                    alert('Please select a folder first');
+                    return;
+                }
+
+                // Double-check folder size limit
+                if (folderSizeExceeded) {
+                    const totalSize = pendingFolderFiles.reduce((sum, file) => sum + file.size, 0);
+                    const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+                    alert(`Folder size (${sizeMB} MB) exceeds the maximum allowed size of ${MAX_FOLDER_SIZE_MB} MB (5 GB).\n\nPlease select a smaller folder to upload.`);
+                    return;
+                }
+
+                const progressContainer = document.getElementById('progressContainer');
+                const progressFill = document.getElementById('progressFill');
+                const speedDisplay = document.getElementById('speedDisplay');
+
+                progressContainer.style.display = 'block';
+                uploadButton.disabled = true;
+                uploadButton.value = 'Uploading...';
+
+                try {
+                    // Upload folder to server (server creates ZIP)
+                    await uploadFolderToServer(pendingFolderFiles, pendingFolderName);
+
+                    // Success - reload page
+                    setTimeout(() => window.location.reload(), 1500);
+                } catch (error) {
+                    console.error('Error uploading folder:', error);
+                    alert('Error uploading folder: ' + error.message);
+                    progressContainer.style.display = 'none';
+                    uploadButton.disabled = false;
+                    uploadButton.value = 'Upload Folder';
+                }
+                return; // Exit early for folder upload
+            }
+
+            // Regular file upload
+            let file = fileInput.files[0];
             if (!file) return;
 
             uploadButton.disabled = true;
@@ -2072,7 +2476,13 @@
         // Monitor file assembly status
         function checkFileStatus() {
             fetch('/file_status')
-                .then(response => response.json())
+                .then(response => {
+                    if (response.redirected) {
+                        window.location.reload();
+                        return;
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     const assemblingFiles = data.assembling || [];
 
